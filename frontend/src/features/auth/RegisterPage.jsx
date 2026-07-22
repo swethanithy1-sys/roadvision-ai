@@ -1,0 +1,109 @@
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import AlertBanner from '../../components/AlertBanner'
+import FormField from '../../components/FormField'
+import { useAuth } from '../../auth/AuthContext'
+
+const INITIAL_FORM = { fullName: '', email: '', phone: '', password: '' }
+
+export default function RegisterPage() {
+  const { register, isLoading } = useAuth()
+  const navigate = useNavigate()
+
+  const [form, setForm] = useState(INITIAL_FORM)
+  const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+
+  function handleChange(e) {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setFieldErrors({})
+    try {
+      await register(form)
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      const data = err.response?.data
+      if (data?.data && typeof data.data === 'object') {
+        setFieldErrors(data.data)
+      }
+      setError(err.friendlyMessage || 'Unable to create your account.')
+    }
+  }
+
+  return (
+    <div className="auth-page d-flex align-items-center justify-content-center min-vh-100">
+      <div className="card p-4 p-md-5" style={{ width: '100%', maxWidth: 460 }}>
+        <div className="text-center mb-4">
+          <div className="auth-logo mx-auto mb-3">RV</div>
+          <h1 className="h4 fw-bold mb-1">Create your account</h1>
+          <p className="text-muted-app small mb-0">Report road damage and track repairs</p>
+        </div>
+
+        <AlertBanner>{error}</AlertBanner>
+
+        <form onSubmit={handleSubmit} noValidate>
+          <FormField label="Full name" htmlFor="fullName" error={fieldErrors.fullName}>
+            <input
+              id="fullName"
+              name="fullName"
+              className="form-control"
+              value={form.fullName}
+              onChange={handleChange}
+              required
+            />
+          </FormField>
+
+          <FormField label="Email address" htmlFor="email" error={fieldErrors.email}>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              className="form-control"
+              value={form.email}
+              onChange={handleChange}
+              required
+              autoComplete="email"
+            />
+          </FormField>
+
+          <FormField label="Phone (optional)" htmlFor="phone">
+            <input
+              id="phone"
+              name="phone"
+              className="form-control"
+              value={form.phone}
+              onChange={handleChange}
+              autoComplete="tel"
+            />
+          </FormField>
+
+          <FormField label="Password" htmlFor="password" error={fieldErrors.password}>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              className="form-control"
+              value={form.password}
+              onChange={handleChange}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </FormField>
+
+          <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isLoading}>
+            {isLoading ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+
+        <p className="text-center small text-muted-app mt-4 mb-0">
+          Already have an account? <Link to="/login">Sign in</Link>
+        </p>
+      </div>
+    </div>
+  )
+}

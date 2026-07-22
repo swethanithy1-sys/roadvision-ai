@@ -1,0 +1,24 @@
+# Backend
+backend/target/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.log
+
+# Env
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
