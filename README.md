@@ -61,6 +61,20 @@ All three implementations are `@ConditionalOnProperty`-gated on `app.ai.provider
 
 Uploaded images are written to `backend/uploads/reports/` and served back at `/api/uploads/reports/<file>` via a Spring resource handler (see `WebConfig`).
 
+### Repair Cost Estimation
+
+Estimated repair cost is a separate concern from damage detection, behind its own `CostEstimator` abstraction — same pluggable-provider pattern as `AIDetectionService`.
+
+- **Rule-based (default, `COST_PROVIDER=rule` or unset)** — `RuleBasedCostEstimatorImpl` delegates to `RepairEstimator`'s deterministic formula: a base cost per damage type (pothole/crack/surface damage) multiplied by a severity multiplier (LOW ×1.0, MEDIUM ×1.6, HIGH ×2.4). Free, instant, no external dependency.
+- **Groq LLM-based (optional, `COST_PROVIDER=groq`)** — `GroqCostEstimatorImpl` asks a free Groq-hosted LLM (`llama-3.3-70b-versatile` by default) to estimate a realistic INR repair cost from the damage type, severity, AI confidence, and report location/description, via Groq's free OpenAI-compatible chat completions API (no card required, 14,400 requests/day free tier). The model is asked to return strict JSON (`response_format: json_object`) which is parsed into `GroqCostEstimate`. **On any failure** (network error, malformed response, rate limit) it transparently falls back to the same rule-based formula above — a report submission never fails just because the LLM call did. Switch to it with:
+
+```bash
+COST_PROVIDER=groq
+GROQ_API_KEY=<your free key from console.groq.com/keys>
+```
+
+Both implementations are `@ConditionalOnProperty`-gated on `app.cost.provider` (`rule` / `groq`), so only one is active at a time — no code changes needed to switch providers.
+
 ### Location: GPS + Reverse Geocoding
 
 "Use my current location" on the Report Damage page fills latitude/longitude from the browser's Geolocation API, then reverse-geocodes those coordinates into a human-readable address via OpenStreetMap's free Nominatim API (`frontend/src/api/geocode.js`) — same free stack as the Hazard Map, no API key needed. The address field stays editable afterward if Nominatim's guess isn't quite right.
@@ -80,6 +94,7 @@ Computed by `AnalyticsService` (not a stored value) as `100 − average severity
 | Charts     | Recharts 3                                                         |
 | Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
 | AI service (optional) | Roboflow hosted inference API (free tier), or self-hosted Python 3.11 + FastAPI + Ultralytics YOLOv8 on Hugging Face Spaces (free) |
+| Cost estimation (optional) | Groq's free, OpenAI-compatible chat completions API (`llama-3.3-70b-versatile`), with automatic fallback to a rule-based formula |
 | Geocoding  | OpenStreetMap Nominatim (free, reverse geocoding for GPS-based reports)          |
 
 ## Project Structure
@@ -171,7 +186,7 @@ New citizen accounts can also self-register via `/register`; the API always assi
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GROQ_BASE_URL`, `GROQ_API_KEY`, `GROQ_MODEL`.
 
 > Set `SEED_ENABLED=false` once you've moved past demo data — `DataSeeder`/`ReportSeeder` only insert when their tables are empty, so disabling seeding after a manual reset (`DELETE FROM ...`) keeps the fake sample reports from coming back on the next restart.
 

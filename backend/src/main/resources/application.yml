@@ -54,6 +54,12 @@ app:
       api-key: ${ROBOFLOW_API_KEY:}
       model-id: ${ROBOFLOW_MODEL_ID:}
       confidence-threshold: ${ROBOFLOW_CONFIDENCE_THRESHOLD:0.25}
+  cost:
+    provider: ${COST_PROVIDER:rule}
+    groq:
+      base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+      api-key: ${GROQ_API_KEY:}
+      model: ${GROQ_MODEL:llama-3.3-70b-versatile}
 
 logging:
   level:

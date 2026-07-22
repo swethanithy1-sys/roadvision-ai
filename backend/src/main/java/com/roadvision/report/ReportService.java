@@ -30,6 +30,7 @@ public class ReportService {
     private final AIDetectionService aiDetectionService;
     private final FileStorageService fileStorageService;
     private final RepairEstimator repairEstimator;
+    private final CostEstimator costEstimator;
     private final ReportMapper reportMapper;
 
     @Transactional
@@ -53,7 +54,13 @@ public class ReportService {
                 detection.confidenceScore(),
                 detection.boundingBoxes(),
                 repairEstimator.estimatePriority(detection.severity()),
-                repairEstimator.estimateCost(detection.damageType(), detection.severity())
+                costEstimator.estimateCost(new CostEstimationContext(
+                        detection.damageType(),
+                        detection.severity(),
+                        detection.confidenceScore(),
+                        request.addressText(),
+                        request.description()
+                ))
         );
 
         report = reportRepository.save(report);

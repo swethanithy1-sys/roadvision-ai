@@ -29,6 +29,14 @@ public class AiServiceConfig {
         return buildClient(baseUrl, timeoutMs);
     }
 
+    @Bean
+    public RestClient groqRestClient(
+            @Value("${app.cost.groq.base-url}") String baseUrl,
+            @Value("${app.ai.timeout-ms}") long timeoutMs
+    ) {
+        return buildClient(baseUrl, timeoutMs);
+    }
+
     private RestClient buildClient(String baseUrl, long timeoutMs) {
         ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(
                 ClientHttpRequestFactorySettings.DEFAULTS
