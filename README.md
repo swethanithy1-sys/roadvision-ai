@@ -2,7 +2,7 @@
 
 AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock today, YOLOv8/OpenCV-ready tomorrow) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
-> **Status: Phase 1 of 5** — project scaffold, database, and authentication are complete and verified end-to-end. Reporting, AI detection, dashboards, analytics, the hazard map, and admin/repair workflows are built in subsequent phases (see [Roadmap](#roadmap)).
+> **Status: Phase 2 of 5** — scaffold, auth, report submission, mock AI detection, My Reports, and Report Details are complete and verified end-to-end. Dashboards analytics, the hazard map, and admin/repair workflows are built in subsequent phases (see [Roadmap](#roadmap)).
 
 ## Architecture
 
@@ -16,12 +16,11 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── security/    JWT issuance & validation, Spring Security filter chain
   ├── auth/        register / login
   ├── user/        user profile
-  ├── detection/*  AIDetectionService interface → MockAIDetectionServiceImpl (Phase 2)
-  ├── storage/*    FileStorageService interface → LocalFileStorageServiceImpl (Phase 2)
-  └── common/      ApiResponse<T> envelope, GlobalExceptionHandler, shared enums
+  ├── detection/    AIDetectionService interface → MockAIDetectionServiceImpl
+  ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
+  ├── report/       submit / list / get / status timeline, RepairEstimator
+  └── common/       ApiResponse<T> envelope, GlobalExceptionHandler, shared enums
 ```
-
-*(`detection` and `storage` modules land in Phase 2.)*
 
 Every endpoint returns a consistent envelope:
 
@@ -30,6 +29,12 @@ Every endpoint returns a consistent envelope:
 ```
 
 The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a real FastAPI/YOLOv8 service later purely by adding a new `AIDetectionService` implementation — no frontend or controller changes required. Same pattern for file storage: `LocalFileStorageServiceImpl` today, `S3FileStorageServiceImpl` later, behind `FileStorageService`.
+
+### Mock AI Detection
+
+`MockAIDetectionServiceImpl` seeds a `Random` from a SHA-256 hash of the uploaded image bytes, so **the same photo always produces the same damage type, severity, confidence, and bounding boxes** — useful for demos and repeatable testing — while different photos plausibly vary. Repair priority and estimated cost are computed separately by `RepairEstimator` from the detected severity/damage type, kept out of the AI service since that's pricing/policy logic, not computer vision.
+
+Uploaded images are written to `backend/uploads/reports/` and served back at `/api/uploads/reports/<file>` via a Spring resource handler (see `WebConfig`).
 
 ## Tech Stack
 
@@ -103,18 +108,24 @@ The app starts at `http://localhost:5173` and talks to the backend at `VITE_API_
 
 New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design).
 
-## API Reference (Phase 1)
+## API Reference
 
-| Method | Endpoint              | Auth        | Description                        |
-|--------|------------------------|-------------|-------------------------------------|
-| POST   | `/api/auth/register`   | Public      | Create a citizen account, returns JWT |
-| POST   | `/api/auth/login`      | Public      | Authenticate, returns JWT           |
-| GET    | `/api/users/me`        | Bearer JWT  | Current authenticated user profile  |
-| GET    | `/api/users/admin/ping`| Bearer JWT (ADMIN) | Role-guard smoke test        |
+| Method | Endpoint                    | Auth        | Description                                    |
+|--------|-------------------------------|-------------|--------------------------------------------------|
+| POST   | `/api/auth/register`         | Public      | Create a citizen account, returns JWT             |
+| POST   | `/api/auth/login`            | Public      | Authenticate, returns JWT                         |
+| GET    | `/api/users/me`              | Bearer JWT  | Current authenticated user profile                |
+| GET    | `/api/users/admin/ping`      | Bearer JWT (ADMIN) | Role-guard smoke test                      |
+| POST   | `/api/reports`               | Bearer JWT  | Submit a report (multipart: `image` + `report` JSON part); runs mock AI detection synchronously |
+| GET    | `/api/reports/mine`          | Bearer JWT  | Paginated list of the current user's reports (`?page=&size=`) |
+| GET    | `/api/reports/{id}`          | Bearer JWT  | Report detail (owner or ADMIN only)               |
+| GET    | `/api/reports/{id}/timeline` | Bearer JWT  | Status change history for a report                |
+
+`POST /api/reports` expects `multipart/form-data` with two parts: `image` (the photo file) and `report` (a JSON blob: `{ latitude, longitude, addressText, description }`, all optional except the image).
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `SEED_ENABLED`, `LOG_LEVEL`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`.
 
 **Frontend** (`frontend/.env.example`): `VITE_API_BASE_URL`.
 
@@ -123,8 +134,8 @@ New citizen accounts can also self-register via `/register`; the API always assi
 ## Roadmap
 
 1. **Phase 1 (done)** — Monorepo scaffold, PostgreSQL schema, JWT auth, role-based authorization, app shell, theme system (light/dark).
-2. **Phase 2** — Report submission (image upload + GPS/manual location), mock AI detection service, My Reports, Report Details with bounding-box overlay.
-3. **Phase 3** — Citizen dashboard stats, Analytics dashboard (Recharts), Hazard Map (Leaflet/OSM).
+2. **Phase 2 (done)** — Report submission (image upload/capture + GPS/manual location), mock AI detection (deterministic, per-image), automatic repair priority/cost estimation, My Reports, Report Details with bounding-box overlay and status timeline.
+3. **Phase 3** — Citizen dashboard live stats, Analytics dashboard (Recharts), Hazard Map (Leaflet/OSM).
 4. **Phase 4** — Admin dashboard, Repair Management, Work Order generation (printable).
 5. **Phase 5** — Polish: dark mode completeness, responsive audit, empty/loading/error states, final documentation pass.
 

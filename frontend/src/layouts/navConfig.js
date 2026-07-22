@@ -1,7 +1,7 @@
 export const CITIZEN_NAV = [
   { label: 'Dashboard', path: '/dashboard', icon: 'grid', available: true },
-  { label: 'Report Damage', path: '/report-damage', icon: 'camera', available: false },
-  { label: 'My Reports', path: '/my-reports', icon: 'list', available: false },
+  { label: 'Report Damage', path: '/report-damage', icon: 'camera', available: true },
+  { label: 'My Reports', path: '/my-reports', icon: 'list', available: true },
   { label: 'Analytics', path: '/analytics', icon: 'bar-chart', available: false },
   { label: 'Hazard Map', path: '/hazard-map', icon: 'map', available: false },
 ]

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import StatCard from '../../components/StatCard'
 
@@ -28,12 +29,14 @@ export default function DashboardPage() {
 
       <div className="card p-4">
         <div className="empty-state">
-          <h2 className="h6 fw-semibold mb-2">Reporting is coming in the next phase</h2>
-          <p className="mb-0 small">
-            This is the Phase 1 foundation: authentication, roles, and the app shell are live.
-            Report submission, AI detection, analytics, and the hazard map are built in the
-            following phases.
+          <h2 className="h6 fw-semibold mb-2">Report your first road hazard</h2>
+          <p className="mb-3 small">
+            Upload a photo and RoadVision AI will detect the damage, classify severity, and
+            estimate repair priority and cost automatically.
           </p>
+          <Link to="/report-damage" className="btn btn-app-primary">
+            Report damage
+          </Link>
         </div>
       </div>
     </div>

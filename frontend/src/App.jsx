@@ -5,6 +5,9 @@ import AppShell from './layouts/AppShell'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
 import DashboardPage from './features/dashboard-citizen/DashboardPage'
+import ReportDamagePage from './features/report-damage/ReportDamagePage'
+import MyReportsPage from './features/my-reports/MyReportsPage'
+import ReportDetailsPage from './features/report-details/ReportDetailsPage'
 
 function PublicOnlyRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -34,6 +37,9 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/report-damage" element={<ReportDamagePage />} />
+          <Route path="/my-reports" element={<MyReportsPage />} />
+          <Route path="/my-reports/:id" element={<ReportDetailsPage />} />
         </Route>
       </Route>
 

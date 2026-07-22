@@ -42,6 +42,7 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   storage:
     upload-dir: ${UPLOAD_DIR:uploads}
+    public-path: ${UPLOAD_PUBLIC_PATH:/api/uploads}
   seed:
     enabled: ${SEED_ENABLED:true}
 
