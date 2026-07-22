@@ -49,6 +49,11 @@ app:
     provider: ${AI_PROVIDER:mock}
     service-url: ${AI_SERVICE_URL:http://localhost:8000}
     timeout-ms: ${AI_SERVICE_TIMEOUT_MS:15000}
+    roboflow:
+      base-url: ${ROBOFLOW_BASE_URL:https://serverless.roboflow.com}
+      api-key: ${ROBOFLOW_API_KEY:}
+      model-id: ${ROBOFLOW_MODEL_ID:}
+      confidence-threshold: ${ROBOFLOW_CONFIDENCE_THRESHOLD:0.25}
 
 logging:
   level:

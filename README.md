@@ -1,6 +1,6 @@
 # RoadVision AI
 
-AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock by default, a real FastAPI+YOLOv8 microservice optionally) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
+AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock by default, or a real detector via Roboflow's hosted API or a self-hosted FastAPI+YOLOv8 microservice) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
 > **Status: Phase 5 of 5 — complete.** Every module from the original spec is implemented and verified end-to-end: auth, reporting + mock AI detection, citizen dashboard, Analytics, Hazard Map, Admin/Repair Management/Work Orders, plus a final polish pass (dark mode across charts/map, reusable loading/error/empty states, success toasts, responsive fixes, lazy-loaded routes). See [Roadmap](#roadmap) for what shipped in each phase.
 
@@ -16,11 +16,11 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── security/    JWT issuance & validation, Spring Security filter chain
   ├── auth/        register / login
   ├── user/        user profile
-  ├── detection/    AIDetectionService interface → Mock impl (default) or Real impl (calls ai-service/)
+  ├── detection/    AIDetectionService interface → Mock (default), Roboflow-hosted, or self-hosted ai-service/ impl
   ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
   ├── report/       submit / list / get / status timeline / map markers / admin list+status+priority, RepairEstimator
   ├── analytics/    citizen + admin dashboard summaries, city-wide overview (aggregated in-memory from ReportRepository)
-  ├── workorder/    printable work order generation (materials/labor/duration from RepairEstimator)
+  ├── workorder/    printable work order generation (materials/labor/duration from RepairEstimator); race-safe create-or-fetch via an isolated REQUIRES_NEW transaction
   └── common/       ApiResponse<T> envelope, GlobalExceptionHandler, shared enums
 ```
 
@@ -45,9 +45,25 @@ AI_PROVIDER=real
 AI_SERVICE_URL=https://<your-space>.hf.space   # or http://localhost:8000 for local docker compose
 ```
 
-Both implementations are `@ConditionalOnProperty`-gated on `app.ai.provider` so only one is ever active — no code changes needed to switch, just the env var. Locally, `docker compose --profile ai up` builds and runs `ai-service/` alongside Postgres (requires a `pothole.pt` weights file in `ai-service/weights/` — gitignored, not committed; see `ai-service/README.md` for where to get one free).
+### Roboflow Hosted AI Detection (optional, recommended for a quick real-model demo)
+
+`RoboflowAIDetectionServiceImpl` calls [Roboflow](https://roboflow.com)'s hosted inference API directly over REST — no self-hosting, no training. Roboflow's free tier is 15 credits/month (≈15,000 inference calls, since 1 credit = 1,000 calls), more than enough for a project like this. Note: Roboflow only lets you export raw `.pt` weights for models trained under *your own* workspace — public Universe models are hosted-inference-only, which is exactly what this implementation uses. Switch to it with:
+
+```bash
+AI_PROVIDER=roboflow
+ROBOFLOW_API_KEY=<your private API key, from Workspace Settings -> API Keys>
+ROBOFLOW_MODEL_ID=<project-slug>/<version>   # e.g. pathole-aynu3/1, from a Universe project's "Deploy Model" modal
+```
+
+Roboflow returns pixel-space, center-point boxes (`x`, `y`, `width`, `height`, `confidence`, `class`); `RoboflowAIDetectionServiceImpl` converts these to our normalized top-left contract and applies the same severity heuristic (box-size + confidence) as the other implementations.
+
+All three implementations are `@ConditionalOnProperty`-gated on `app.ai.provider` (`mock` / `real` / `roboflow`) so only one is ever active — no code changes needed to switch, just the env var. Locally, `docker compose --profile ai up` builds and runs `ai-service/` alongside Postgres (requires a `pothole.pt` weights file in `ai-service/weights/` — gitignored, not committed; see `ai-service/README.md` for where to get one free).
 
 Uploaded images are written to `backend/uploads/reports/` and served back at `/api/uploads/reports/<file>` via a Spring resource handler (see `WebConfig`).
+
+### Location: GPS + Reverse Geocoding
+
+"Use my current location" on the Report Damage page fills latitude/longitude from the browser's Geolocation API, then reverse-geocodes those coordinates into a human-readable address via OpenStreetMap's free Nominatim API (`frontend/src/api/geocode.js`) — same free stack as the Hazard Map, no API key needed. The address field stays editable afterward if Nominatim's guess isn't quite right.
 
 ### Road Safety Score
 
@@ -63,7 +79,8 @@ Computed by `AnalyticsService` (not a stored value) as `100 − average severity
 | Maps       | Leaflet + react-leaflet + OpenStreetMap tiles                      |
 | Charts     | Recharts 3                                                         |
 | Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
-| AI service (optional) | Python 3.11, FastAPI, Ultralytics YOLOv8, deployable on Hugging Face Spaces (free) |
+| AI service (optional) | Roboflow hosted inference API (free tier), or self-hosted Python 3.11 + FastAPI + Ultralytics YOLOv8 on Hugging Face Spaces (free) |
+| Geocoding  | OpenStreetMap Nominatim (free, reverse geocoding for GPS-based reports)          |
 
 ## Project Structure
 
@@ -154,7 +171,9 @@ New citizen accounts can also self-register via `/register`; the API always assi
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`.
+
+> Set `SEED_ENABLED=false` once you've moved past demo data — `DataSeeder`/`ReportSeeder` only insert when their tables are empty, so disabling seeding after a manual reset (`DELETE FROM ...`) keeps the fake sample reports from coming back on the next restart.
 
 **Frontend** (`frontend/.env.example`): `VITE_API_BASE_URL`.
 
@@ -178,6 +197,8 @@ The app's own JWT auth and local-disk file storage are provider-agnostic, so:
 3. **Phase 3 (done)** — Live citizen dashboard (stats, road safety score, recent activity), Analytics dashboard (severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas — Recharts), Hazard Map (Leaflet/OSM, severity-colored markers, popup details).
 4. **Phase 4 (done)** — Admin Dashboard (fleet-wide stats + recent reports), Repair Management (list/filter all reports, assign priority, update status), printable Work Order generation (materials, labor, duration, signature lines).
 5. **Phase 5 (done)** — Polish pass: theme-aware charts and map tiles in dark mode (Recharts axes/tooltips/grid, Leaflet tile filter + popup styling), reusable `LoadingState`/`ErrorState`/`EmptyState`/`Toast` components applied across every page, success toasts on Repair Management actions, a null-pointer fix on the citizen dashboard's error path, responsive fixes (work order materials list, detail list, hazard map height on small screens), and route-level code-splitting for the Recharts/Leaflet pages (818 KB → 255 KB main bundle).
+
+**Post-launch additions**: real AI detection via Roboflow's hosted API and/or a self-hosted `ai-service/` (FastAPI+YOLOv8), reverse geocoding on GPS-based reports (OpenStreetMap Nominatim), and a fix for a work-order creation race condition (concurrent "generate" requests for the same report could hit the DB's unique constraint and leak a raw SQL error — `WorkOrderWriter` now isolates the insert attempt in its own transaction and gracefully falls back to the winning row on conflict).
 
 ## Design System
 

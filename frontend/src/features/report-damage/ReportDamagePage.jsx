@@ -5,6 +5,7 @@ import BoundingBoxOverlay from '../../components/BoundingBoxOverlay'
 import FormField from '../../components/FormField'
 import SeverityPill from '../../components/SeverityPill'
 import { assetUrl } from '../../api/assetUrl'
+import { reverseGeocode } from '../../api/geocode'
 import { submitReport } from '../../api/reportApi'
 
 const INITIAL_FORM = { addressText: '', description: '', latitude: '', longitude: '' }
@@ -42,13 +43,19 @@ export default function ReportDamagePage() {
 
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setForm((prev) => ({
-          ...prev,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-        }))
-        setLocating(false)
+      async (position) => {
+        const latitude = position.coords.latitude.toFixed(6)
+        const longitude = position.coords.longitude.toFixed(6)
+        setForm((prev) => ({ ...prev, latitude, longitude }))
+
+        try {
+          const address = await reverseGeocode(latitude, longitude)
+          setForm((prev) => ({ ...prev, addressText: address }))
+        } catch {
+          // Non-fatal — coordinates are already filled in; user can type the address manually.
+        } finally {
+          setLocating(false)
+        }
       },
       () => {
         setError('Unable to fetch your location. Please enter the address manually.')

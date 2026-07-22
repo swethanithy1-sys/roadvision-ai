@@ -18,6 +18,18 @@ public class AiServiceConfig {
             @Value("${app.ai.service-url}") String serviceUrl,
             @Value("${app.ai.timeout-ms}") long timeoutMs
     ) {
+        return buildClient(serviceUrl, timeoutMs);
+    }
+
+    @Bean
+    public RestClient roboflowRestClient(
+            @Value("${app.ai.roboflow.base-url}") String baseUrl,
+            @Value("${app.ai.timeout-ms}") long timeoutMs
+    ) {
+        return buildClient(baseUrl, timeoutMs);
+    }
+
+    private RestClient buildClient(String baseUrl, long timeoutMs) {
         ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(
                 ClientHttpRequestFactorySettings.DEFAULTS
                         .withConnectTimeout(Duration.ofMillis(timeoutMs))
@@ -25,7 +37,7 @@ public class AiServiceConfig {
         );
 
         return RestClient.builder()
-                .baseUrl(serviceUrl)
+                .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
                 .build();
     }
