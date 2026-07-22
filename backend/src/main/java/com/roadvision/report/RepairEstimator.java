@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 /**
  * Derives repair priority and an approximate repair cost from AI detection output.
@@ -43,5 +44,29 @@ public class RepairEstimator {
         };
 
         return base.multiply(severityMultiplier).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public List<String> estimateMaterials(DamageType damageType) {
+        return switch (damageType) {
+            case POTHOLE -> List.of("Hot mix asphalt", "Tack coat", "Aggregate base", "Compactor rental");
+            case CRACK -> List.of("Crack sealant", "Joint filler", "Surface primer");
+            case SURFACE_DAMAGE -> List.of("Asphalt overlay mix", "Milling machine", "Aggregate base", "Surface primer");
+        };
+    }
+
+    public BigDecimal estimateLaborHours(Severity severity) {
+        return switch (severity) {
+            case LOW -> BigDecimal.valueOf(4);
+            case MEDIUM -> BigDecimal.valueOf(10);
+            case HIGH -> BigDecimal.valueOf(20);
+        };
+    }
+
+    public BigDecimal estimateDurationDays(Severity severity) {
+        return switch (severity) {
+            case LOW -> BigDecimal.valueOf(1);
+            case MEDIUM -> BigDecimal.valueOf(2);
+            case HIGH -> BigDecimal.valueOf(4);
+        };
     }
 }

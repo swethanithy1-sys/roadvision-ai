@@ -2,7 +2,7 @@
 
 AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock today, YOLOv8/OpenCV-ready tomorrow) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
-> **Status: Phase 3 of 5** — scaffold, auth, reporting + mock AI detection, live citizen dashboard, Analytics dashboard, and the Hazard Map are complete and verified end-to-end. Admin/repair workflows are built in the remaining phases (see [Roadmap](#roadmap)).
+> **Status: Phase 4 of 5** — scaffold, auth, reporting + mock AI detection, citizen dashboard, Analytics, Hazard Map, and the full Admin/Repair Management/Work Order workflow are complete and verified end-to-end. Only final polish remains (see [Roadmap](#roadmap)).
 
 ## Architecture
 
@@ -18,8 +18,9 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── user/        user profile
   ├── detection/    AIDetectionService interface → MockAIDetectionServiceImpl
   ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
-  ├── report/       submit / list / get / status timeline / map markers, RepairEstimator
-  ├── analytics/    citizen dashboard summary + city-wide analytics overview (aggregated in-memory from ReportRepository)
+  ├── report/       submit / list / get / status timeline / map markers / admin list+status+priority, RepairEstimator
+  ├── analytics/    citizen + admin dashboard summaries, city-wide overview (aggregated in-memory from ReportRepository)
+  ├── workorder/    printable work order generation (materials/labor/duration from RepairEstimator)
   └── common/       ApiResponse<T> envelope, GlobalExceptionHandler, shared enums
 ```
 
@@ -112,7 +113,7 @@ The app starts at `http://localhost:5173` and talks to the backend at `VITE_API_
 | Citizen | citizen1@roadvision.ai    | Password123!     |
 | Citizen | citizen2@roadvision.ai    | Password123!     |
 
-New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design).
+New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design). After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
 
 ## API Reference
 
@@ -129,6 +130,12 @@ New citizen accounts can also self-register via `/register`; the API always assi
 | GET    | `/api/reports/map`           | Bearer JWT  | All reports with coordinates, for the hazard map (reporter identity omitted) |
 | GET    | `/api/analytics/citizen-summary` | Bearer JWT | Current user's dashboard stats + road safety score + recent activity |
 | GET    | `/api/analytics/overview`    | Bearer JWT  | City-wide severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas, road safety index |
+| GET    | `/api/reports`               | Bearer JWT (ADMIN) | All reports, paginated, optional `?status=` filter |
+| PATCH  | `/api/reports/{id}/status`   | Bearer JWT (ADMIN) | Update status (`{ status, note }`); appends to the status timeline; `ASSIGNED` records the acting admin |
+| PATCH  | `/api/reports/{id}/priority` | Bearer JWT (ADMIN) | Override the repair priority (`{ repairPriority }`) |
+| GET    | `/api/analytics/admin-summary` | Bearer JWT (ADMIN) | Total/pending reports, high-priority count, total estimated outstanding cost, recent reports |
+| POST   | `/api/reports/{id}/work-order` | Bearer JWT (ADMIN) | Generate a work order for a report (idempotent — returns the existing one if already generated) |
+| GET    | `/api/reports/{id}/work-order` | Bearer JWT (ADMIN) | Fetch a report's work order (404 if none generated yet) |
 
 `POST /api/reports` expects `multipart/form-data` with two parts: `image` (the photo file) and `report` (a JSON blob: `{ latitude, longitude, addressText, description }`, all optional except the image).
 
@@ -145,7 +152,7 @@ New citizen accounts can also self-register via `/register`; the API always assi
 1. **Phase 1 (done)** — Monorepo scaffold, PostgreSQL schema, JWT auth, role-based authorization, app shell, theme system (light/dark).
 2. **Phase 2 (done)** — Report submission (image upload/capture + GPS/manual location), mock AI detection (deterministic, per-image), automatic repair priority/cost estimation, My Reports, Report Details with bounding-box overlay and status timeline.
 3. **Phase 3 (done)** — Live citizen dashboard (stats, road safety score, recent activity), Analytics dashboard (severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas — Recharts), Hazard Map (Leaflet/OSM, severity-colored markers, popup details).
-4. **Phase 4** — Admin dashboard, Repair Management, Work Order generation (printable).
+4. **Phase 4 (done)** — Admin Dashboard (fleet-wide stats + recent reports), Repair Management (list/filter all reports, assign priority, update status), printable Work Order generation (materials, labor, duration, signature lines).
 5. **Phase 5** — Polish: dark mode completeness, responsive audit, empty/loading/error states, final documentation pass.
 
 ## Design System

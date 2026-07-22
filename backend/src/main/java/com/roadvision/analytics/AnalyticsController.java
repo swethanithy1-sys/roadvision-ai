@@ -3,6 +3,7 @@ package com.roadvision.analytics;
 import com.roadvision.common.response.ApiResponse;
 import com.roadvision.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,5 +24,11 @@ public class AnalyticsController {
     @GetMapping("/overview")
     public ApiResponse<AnalyticsOverview> overview() {
         return ApiResponse.success(analyticsService.getOverview());
+    }
+
+    @GetMapping("/admin-summary")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<AdminDashboardSummary> adminSummary() {
+        return ApiResponse.success(analyticsService.getAdminSummary());
     }
 }

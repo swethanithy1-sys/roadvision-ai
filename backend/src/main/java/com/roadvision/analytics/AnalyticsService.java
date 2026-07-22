@@ -1,5 +1,6 @@
 package com.roadvision.analytics;
 
+import com.roadvision.common.constants.RepairPriority;
 import com.roadvision.common.constants.ReportStatus;
 import com.roadvision.common.constants.Severity;
 import com.roadvision.report.Report;
@@ -48,6 +49,31 @@ public class AnalyticsService {
                 .toList();
 
         return new CitizenDashboardSummary(total, pending, resolved, highSeverity, roadSafetyScore(reports), recentActivity);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminDashboardSummary getAdminSummary() {
+        List<Report> reports = reportRepository.findAll();
+
+        List<Report> openReports = reports.stream()
+                .filter(r -> r.getStatus() != ReportStatus.RESOLVED && r.getStatus() != ReportStatus.REJECTED)
+                .toList();
+
+        long highPriority = openReports.stream()
+                .filter(r -> r.getRepairPriority() == RepairPriority.HIGH || r.getRepairPriority() == RepairPriority.URGENT)
+                .count();
+
+        BigDecimal totalEstimatedCost = openReports.stream()
+                .map(Report::getEstimatedCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<ReportResponse> recent = reports.stream()
+                .sorted(Comparator.comparing(Report::getCreatedAt).reversed())
+                .limit(5)
+                .map(reportMapper::toResponse)
+                .toList();
+
+        return new AdminDashboardSummary(reports.size(), openReports.size(), highPriority, totalEstimatedCost, recent);
     }
 
     @Transactional(readOnly = true)

@@ -237,6 +237,94 @@ button {
   font-weight: 700;
 }
 
+.work-order-sheet__image {
+  width: 100%;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  max-height: 320px;
+}
+
+.work-order-sheet__materials {
+  columns: 2;
+  padding-left: var(--space-4);
+  margin-bottom: 0;
+}
+
+.work-order-sheet__materials li {
+  margin-bottom: var(--space-2);
+}
+
+.work-order-sheet__signature {
+  border-bottom: 1px solid var(--color-border);
+  height: 32px;
+}
+
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-shell__content {
+    padding: 0 !important;
+  }
+
+  .work-order-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}
+
+.repair-table-card {
+  overflow: hidden;
+}
+
+.repair-table {
+  color: var(--color-text);
+  margin-bottom: 0;
+}
+
+.repair-table thead th {
+  color: var(--color-text-subtle);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-3);
+}
+
+.repair-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.repair-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.repair-table tbody tr.is-saving {
+  opacity: 0.6;
+}
+
+.repair-table__thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.repair-table select.form-select {
+  min-width: 140px;
+}
+
 .hazard-map-card {
   overflow: hidden;
 }

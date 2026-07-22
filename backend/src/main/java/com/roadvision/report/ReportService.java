@@ -75,6 +75,43 @@ public class ReportService {
     }
 
     @Transactional(readOnly = true)
+    public Page<ReportResponse> listAll(Pageable pageable, ReportStatus statusFilter) {
+        Page<Report> page = statusFilter == null
+                ? reportRepository.findAll(pageable)
+                : reportRepository.findByStatusOrderByCreatedAtDesc(statusFilter, pageable);
+        return page.map(reportMapper::toResponse);
+    }
+
+    @Transactional
+    public ReportResponse updateStatus(UUID reportId, UUID adminId, ReportStatusUpdateRequest request) {
+        Report report = reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Report not found"));
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        report.setStatus(request.status());
+        if (request.status() == ReportStatus.ASSIGNED) {
+            report.setAssignedTo(admin);
+        }
+        report = reportRepository.save(report);
+
+        statusHistoryRepository.save(new ReportStatusHistory(report, request.status(), request.note(), admin));
+
+        return reportMapper.toResponse(report);
+    }
+
+    @Transactional
+    public ReportResponse updatePriority(UUID reportId, ReportPriorityUpdateRequest request) {
+        Report report = reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Report not found"));
+
+        report.setRepairPriority(request.repairPriority());
+        report = reportRepository.save(report);
+
+        return reportMapper.toResponse(report);
+    }
+
+    @Transactional(readOnly = true)
     public java.util.List<ReportMapMarker> listMapMarkers() {
         return reportRepository.findByLatitudeIsNotNullAndLongitudeIsNotNull().stream()
                 .map(reportMapper::toMapMarker)

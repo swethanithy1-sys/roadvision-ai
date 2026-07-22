@@ -7,3 +7,7 @@ export function fetchCitizenSummary() {
 export function fetchAnalyticsOverview() {
   return axiosClient.get('/analytics/overview').then((res) => res.data.data)
 }
+
+export function fetchAdminSummary() {
+  return axiosClient.get('/analytics/admin-summary').then((res) => res.data.data)
+}

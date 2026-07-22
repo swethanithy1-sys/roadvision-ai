@@ -32,3 +32,17 @@ export function fetchReportTimeline(id) {
 export function fetchReportMap() {
   return axiosClient.get('/reports/map').then((res) => res.data.data)
 }
+
+export function fetchAllReports(page = 0, size = 10, status = null) {
+  return axiosClient
+    .get('/reports', { params: { page, size, ...(status ? { status } : {}) } })
+    .then((res) => res.data.data)
+}
+
+export function updateReportStatus(id, status, note) {
+  return axiosClient.patch(`/reports/${id}/status`, { status, note }).then((res) => res.data.data)
+}
+
+export function updateReportPriority(id, repairPriority) {
+  return axiosClient.patch(`/reports/${id}/priority`, { repairPriority }).then((res) => res.data.data)
+}

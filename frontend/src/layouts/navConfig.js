@@ -7,8 +7,8 @@ export const CITIZEN_NAV = [
 ]
 
 export const ADMIN_NAV = [
-  { label: 'Admin Dashboard', path: '/admin', icon: 'shield', available: false },
-  { label: 'Repair Management', path: '/admin/repairs', icon: 'tool', available: false },
+  { label: 'Admin Dashboard', path: '/admin', icon: 'shield', available: true },
+  { label: 'Repair Management', path: '/admin/repairs', icon: 'tool', available: true },
   { label: 'Analytics', path: '/analytics', icon: 'bar-chart', available: true },
   { label: 'Hazard Map', path: '/hazard-map', icon: 'map', available: true },
 ]

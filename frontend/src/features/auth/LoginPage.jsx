@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
 
-  const from = location.state?.from?.pathname || '/dashboard'
+  const from = location.state?.from?.pathname
 
   function handleChange(e) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -22,8 +22,8 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     try {
-      await login(form.email, form.password)
-      navigate(from, { replace: true })
+      const loggedInUser = await login(form.email, form.password)
+      navigate(from || (loggedInUser.role === 'ADMIN' ? '/admin' : '/dashboard'), { replace: true })
     } catch (err) {
       setError(err.friendlyMessage || 'Unable to log in. Please check your credentials.')
     }
