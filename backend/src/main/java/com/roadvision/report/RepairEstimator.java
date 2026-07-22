@@ -18,9 +18,11 @@ import java.util.List;
 @Component
 public class RepairEstimator {
 
-    private static final BigDecimal BASE_COST_POTHOLE = BigDecimal.valueOf(1500);
-    private static final BigDecimal BASE_COST_CRACK = BigDecimal.valueOf(600);
-    private static final BigDecimal BASE_COST_SURFACE_DAMAGE = BigDecimal.valueOf(2200);
+    // Base repair costs in INR, reflecting typical Indian municipal road-repair
+    // ballparks; scaled up by the severity multiplier below.
+    private static final BigDecimal BASE_COST_POTHOLE = BigDecimal.valueOf(8000);
+    private static final BigDecimal BASE_COST_CRACK = BigDecimal.valueOf(4500);
+    private static final BigDecimal BASE_COST_SURFACE_DAMAGE = BigDecimal.valueOf(15000);
 
     public RepairPriority estimatePriority(Severity severity) {
         return switch (severity) {
