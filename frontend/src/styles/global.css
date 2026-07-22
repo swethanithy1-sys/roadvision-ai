@@ -20,6 +20,17 @@ body {
   font-feature-settings: 'cv11', 'ss01';
   letter-spacing: -0.011em;
   transition: background-color var(--transition-base), color var(--transition-base);
+
+  /* Map Bootstrap's core color tokens to our theme so every Bootstrap component
+     (cards, headings, tables, selects) follows light/dark instead of Bootstrap's
+     baked-in light-theme colors. */
+  --bs-body-color: var(--color-text);
+  --bs-body-color-rgb: var(--color-text-rgb);
+  --bs-heading-color: var(--color-text);
+  --bs-emphasis-color: var(--color-text);
+  --bs-secondary-color: var(--color-text-muted);
+  --bs-border-color: var(--color-border);
+  --bs-tertiary-bg: var(--color-surface-muted);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -46,6 +57,7 @@ button {
 
 .card {
   background-color: var(--color-surface);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
