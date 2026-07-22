@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import NavIcon from './navIcons'
 import { ADMIN_NAV, CITIZEN_NAV } from './navConfig'
 
 export default function Sidebar({ open, onClose }) {
@@ -18,6 +19,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <nav className="app-sidebar__nav">
+          <div className="app-sidebar__section">{isAdmin ? 'Administration' : 'Menu'}</div>
           {items.map((item) =>
             item.available ? (
               <NavLink
@@ -26,11 +28,13 @@ export default function Sidebar({ open, onClose }) {
                 className={({ isActive }) => `app-sidebar__link ${isActive ? 'is-active' : ''}`}
                 onClick={onClose}
               >
-                {item.label}
+                <NavIcon name={item.icon} />
+                <span className="app-sidebar__label">{item.label}</span>
               </NavLink>
             ) : (
               <span key={item.path} className="app-sidebar__link is-disabled" title="Coming soon">
-                {item.label}
+                <NavIcon name={item.icon} />
+                <span className="app-sidebar__label">{item.label}</span>
                 <span className="badge-soon">Soon</span>
               </span>
             )
