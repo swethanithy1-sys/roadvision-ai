@@ -75,6 +75,13 @@ public class ReportService {
     }
 
     @Transactional(readOnly = true)
+    public java.util.List<ReportMapMarker> listMapMarkers() {
+        return reportRepository.findByLatitudeIsNotNullAndLongitudeIsNotNull().stream()
+                .map(reportMapper::toMapMarker)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public java.util.List<ReportStatusHistoryResponse> getTimeline(UUID reportId, UUID requesterId, boolean requesterIsAdmin) {
         findAccessibleReport(reportId, requesterId, requesterIsAdmin);
 

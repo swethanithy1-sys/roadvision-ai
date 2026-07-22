@@ -8,6 +8,8 @@ import DashboardPage from './features/dashboard-citizen/DashboardPage'
 import ReportDamagePage from './features/report-damage/ReportDamagePage'
 import MyReportsPage from './features/my-reports/MyReportsPage'
 import ReportDetailsPage from './features/report-details/ReportDetailsPage'
+import AnalyticsPage from './features/analytics/AnalyticsPage'
+import HazardMapPage from './features/hazard-map/HazardMapPage'
 
 function PublicOnlyRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -40,6 +42,8 @@ function AppRoutes() {
           <Route path="/report-damage" element={<ReportDamagePage />} />
           <Route path="/my-reports" element={<MyReportsPage />} />
           <Route path="/my-reports/:id" element={<ReportDetailsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/hazard-map" element={<HazardMapPage />} />
         </Route>
       </Route>
 

@@ -45,6 +45,11 @@ public class ReportController {
         return ApiResponse.success(PageResponse.from(reportService.listMine(principal.getId(), pageable)));
     }
 
+    @GetMapping("/map")
+    public ApiResponse<List<ReportMapMarker>> map() {
+        return ApiResponse.success(reportService.listMapMarkers());
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<ReportResponse> getById(
             @AuthenticationPrincipal UserPrincipal principal,

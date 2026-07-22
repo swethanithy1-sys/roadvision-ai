@@ -28,3 +28,7 @@ export function fetchReportById(id) {
 export function fetchReportTimeline(id) {
   return axiosClient.get(`/reports/${id}/timeline`).then((res) => res.data.data)
 }
+
+export function fetchReportMap() {
+  return axiosClient.get('/reports/map').then((res) => res.data.data)
+}

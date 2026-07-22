@@ -2,7 +2,7 @@
 
 AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock today, YOLOv8/OpenCV-ready tomorrow) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
-> **Status: Phase 2 of 5** — scaffold, auth, report submission, mock AI detection, My Reports, and Report Details are complete and verified end-to-end. Dashboards analytics, the hazard map, and admin/repair workflows are built in subsequent phases (see [Roadmap](#roadmap)).
+> **Status: Phase 3 of 5** — scaffold, auth, reporting + mock AI detection, live citizen dashboard, Analytics dashboard, and the Hazard Map are complete and verified end-to-end. Admin/repair workflows are built in the remaining phases (see [Roadmap](#roadmap)).
 
 ## Architecture
 
@@ -18,7 +18,8 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── user/        user profile
   ├── detection/    AIDetectionService interface → MockAIDetectionServiceImpl
   ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
-  ├── report/       submit / list / get / status timeline, RepairEstimator
+  ├── report/       submit / list / get / status timeline / map markers, RepairEstimator
+  ├── analytics/    citizen dashboard summary + city-wide analytics overview (aggregated in-memory from ReportRepository)
   └── common/       ApiResponse<T> envelope, GlobalExceptionHandler, shared enums
 ```
 
@@ -36,6 +37,10 @@ The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a re
 
 Uploaded images are written to `backend/uploads/reports/` and served back at `/api/uploads/reports/<file>` via a Spring resource handler (see `WebConfig`).
 
+### Road Safety Score
+
+Computed by `AnalyticsService` (not a stored value) as `100 − average severity penalty` across a scope's **currently unresolved** reports (LOW=5, MEDIUM=15, HIGH=30 penalty); resolved/rejected reports no longer count as live hazards. The same formula powers both the per-citizen score (`/analytics/citizen-summary`) and the city-wide Road Safety Index (`/analytics/overview`) — just over a different report set.
+
 ## Tech Stack
 
 | Layer      | Technology                                                        |
@@ -43,8 +48,8 @@ Uploaded images are written to `backend/uploads/reports/` and served back at `/a
 | Frontend   | React 18, Vite, React Router v6, Axios, Bootstrap 5 + CSS variables |
 | Backend    | Java 21, Spring Boot 3, Spring Security (JWT), Spring Data JPA, Hibernate, Lombok, Flyway |
 | Database   | PostgreSQL 16                                                     |
-| Maps       | Leaflet + OpenStreetMap (Phase 3)                                  |
-| Charts     | Recharts (Phase 3)                                                 |
+| Maps       | Leaflet + react-leaflet + OpenStreetMap tiles                      |
+| Charts     | Recharts 3                                                         |
 | Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
 
 ## Project Structure
@@ -85,6 +90,7 @@ mvn spring-boot:run
 The API starts at `http://localhost:8080/api`. On first run:
 - Flyway applies `V1__init_schema.sql` automatically.
 - `DataSeeder` seeds three demo accounts (see below) since the `users` table starts empty.
+- `ReportSeeder` seeds 9 sample reports spanning all severities, statuses, and the last ~5 months (with generated placeholder photos) so the dashboard, analytics, and hazard map aren't empty on first run.
 
 Configuration lives in `backend/src/main/resources/application.yml`, all overridable via environment variables — see `backend/.env.example`.
 
@@ -120,6 +126,9 @@ New citizen accounts can also self-register via `/register`; the API always assi
 | GET    | `/api/reports/mine`          | Bearer JWT  | Paginated list of the current user's reports (`?page=&size=`) |
 | GET    | `/api/reports/{id}`          | Bearer JWT  | Report detail (owner or ADMIN only)               |
 | GET    | `/api/reports/{id}/timeline` | Bearer JWT  | Status change history for a report                |
+| GET    | `/api/reports/map`           | Bearer JWT  | All reports with coordinates, for the hazard map (reporter identity omitted) |
+| GET    | `/api/analytics/citizen-summary` | Bearer JWT | Current user's dashboard stats + road safety score + recent activity |
+| GET    | `/api/analytics/overview`    | Bearer JWT  | City-wide severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas, road safety index |
 
 `POST /api/reports` expects `multipart/form-data` with two parts: `image` (the photo file) and `report` (a JSON blob: `{ latitude, longitude, addressText, description }`, all optional except the image).
 
@@ -135,7 +144,7 @@ New citizen accounts can also self-register via `/register`; the API always assi
 
 1. **Phase 1 (done)** — Monorepo scaffold, PostgreSQL schema, JWT auth, role-based authorization, app shell, theme system (light/dark).
 2. **Phase 2 (done)** — Report submission (image upload/capture + GPS/manual location), mock AI detection (deterministic, per-image), automatic repair priority/cost estimation, My Reports, Report Details with bounding-box overlay and status timeline.
-3. **Phase 3** — Citizen dashboard live stats, Analytics dashboard (Recharts), Hazard Map (Leaflet/OSM).
+3. **Phase 3 (done)** — Live citizen dashboard (stats, road safety score, recent activity), Analytics dashboard (severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas — Recharts), Hazard Map (Leaflet/OSM, severity-colored markers, popup details).
 4. **Phase 4** — Admin dashboard, Repair Management, Work Order generation (printable).
 5. **Phase 5** — Polish: dark mode completeness, responsive audit, empty/loading/error states, final documentation pass.
 

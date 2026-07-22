@@ -32,4 +32,21 @@ public class ReportMapper {
                 report.getUpdatedAt()
         );
     }
+
+    public ReportMapMarker toMapMarker(Report report) {
+        return new ReportMapMarker(
+                report.getId(),
+                uploadsPublicPath + "/" + report.getImagePath(),
+                report.getLatitude(),
+                report.getLongitude(),
+                report.getAddressText(),
+                report.getDamageType(),
+                report.getSeverity(),
+                report.getConfidenceScore(),
+                report.getRepairPriority(),
+                report.getEstimatedCost(),
+                report.getStatus(),
+                report.getCreatedAt()
+        );
+    }
 }
