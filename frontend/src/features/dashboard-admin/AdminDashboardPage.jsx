@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ErrorState from '../../components/ErrorState'
+import LoadingState from '../../components/LoadingState'
 import SeverityPill from '../../components/SeverityPill'
 import StatCard from '../../components/StatCard'
 import StatusPill from '../../components/StatusPill'
@@ -15,31 +17,26 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
 
     fetchAdminSummary()
-      .then((data) => {
-        if (!cancelled) setSummary(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.friendlyMessage || 'Failed to load the admin dashboard.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .then(setSummary)
+      .catch((err) => setError(err.friendlyMessage || 'Failed to load the admin dashboard.'))
+      .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    load()
+  }, [load])
+
   if (loading) {
-    return <div className="card p-4 text-center text-muted-app">Loading admin dashboard…</div>
+    return <LoadingState label="Loading admin dashboard…" />
   }
 
   if (error || !summary) {
-    return <div className="alert alert-danger">{error || 'No data available.'}</div>
+    return <ErrorState message={error || 'No data available.'} onRetry={load} />
   }
 
   return (

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ErrorState from '../../components/ErrorState'
+import LoadingState from '../../components/LoadingState'
 import SeverityPill from '../../components/SeverityPill'
 import StatusPill from '../../components/StatusPill'
+import Toast from '../../components/Toast'
 import { assetUrl } from '../../api/assetUrl'
 import { fetchAllReports, updateReportPriority, updateReportStatus } from '../../api/reportApi'
 
@@ -27,6 +30,7 @@ export default function RepairManagementPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState(null)
+  const [toast, setToast] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -50,6 +54,7 @@ export default function RepairManagementPage() {
       const note = status === 'RESOLVED' ? 'Repair completed and verified' : `Status updated to ${STATUS_LABELS[status]}`
       const updated = await updateReportStatus(report.id, status, note)
       setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setToast(`Status updated to ${STATUS_LABELS[status]}`)
     } catch (err) {
       setError(err.friendlyMessage || 'Failed to update status.')
     } finally {
@@ -63,6 +68,7 @@ export default function RepairManagementPage() {
     try {
       const updated = await updateReportPriority(report.id, priority)
       setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setToast(`Priority updated to ${priority}`)
     } catch (err) {
       setError(err.friendlyMessage || 'Failed to update priority.')
     } finally {
@@ -92,9 +98,9 @@ export default function RepairManagementPage() {
         </select>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && <ErrorState message={error} onRetry={load} />}
 
-      {loading && <div className="card p-4 text-center text-muted-app">Loading reports…</div>}
+      {loading && <LoadingState label="Loading reports…" />}
 
       {!loading && reports.length === 0 && (
         <div className="card p-4">
@@ -176,6 +182,8 @@ export default function RepairManagementPage() {
           </div>
         </div>
       )}
+
+      <Toast message={toast} onDismiss={() => setToast('')} />
     </div>
   )
 }

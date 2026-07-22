@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ErrorState from '../../components/ErrorState'
 import SeverityPill from '../../components/SeverityPill'
 import StatusPill from '../../components/StatusPill'
 import StatCard from '../../components/StatCard'
@@ -23,24 +24,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
 
     fetchCitizenSummary()
-      .then((data) => {
-        if (!cancelled) setSummary(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.friendlyMessage || 'Failed to load your dashboard.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .then(setSummary)
+      .catch((err) => setError(err.friendlyMessage || 'Failed to load your dashboard.'))
+      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (error) {
+    return (
+      <div>
+        <div className="mb-4">
+          <h1 className="h4 fw-bold mb-1">Welcome back, {user?.fullName?.split(' ')[0]}</h1>
+        </div>
+        <ErrorState message={error} onRetry={load} />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -48,8 +55,6 @@ export default function DashboardPage() {
         <h1 className="h4 fw-bold mb-1">Welcome back, {user?.fullName?.split(' ')[0]}</h1>
         <p className="text-muted-app mb-0">Here&apos;s the current state of your road reports.</p>
       </div>
-
-      {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="row g-3 mb-4">
         <div className="col-6 col-lg-3">

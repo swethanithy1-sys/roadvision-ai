@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BoundingBoxOverlay from '../../components/BoundingBoxOverlay'
+import EmptyState from '../../components/EmptyState'
+import LoadingState from '../../components/LoadingState'
 import SeverityPill from '../../components/SeverityPill'
 import StatusPill from '../../components/StatusPill'
 import { assetUrl } from '../../api/assetUrl'
@@ -32,43 +34,39 @@ export default function ReportDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
     setLoading(true)
+    setError('')
 
     Promise.all([fetchReportById(id), fetchReportTimeline(id)])
       .then(([reportData, timelineData]) => {
-        if (!cancelled) {
-          setReport(reportData)
-          setTimeline(timelineData)
-        }
+        setReport(reportData)
+        setTimeline(timelineData)
       })
-      .catch((err) => {
-        if (!cancelled) setError(err.friendlyMessage || 'Failed to load this report.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .catch((err) => setError(err.friendlyMessage || 'Failed to load this report.'))
+      .finally(() => setLoading(false))
   }, [id])
 
+  useEffect(() => {
+    load()
+  }, [load])
+
   if (loading) {
-    return <div className="card p-4 text-center text-muted-app">Loading report…</div>
+    return <LoadingState label="Loading report…" />
   }
 
   if (error || !report) {
     return (
       <div className="card p-4">
-        <div className="empty-state">
-          <h2 className="h6 fw-semibold mb-2">Report not found</h2>
-          <p className="mb-3 small">{error || 'This report does not exist or you do not have access to it.'}</p>
-          <Link to="/my-reports" className="btn btn-app-primary">
-            Back to My Reports
-          </Link>
-        </div>
+        <EmptyState
+          title="Report not found"
+          description={error || 'This report does not exist or you do not have access to it.'}
+          action={
+            <Link to="/my-reports" className="btn btn-app-primary">
+              Back to My Reports
+            </Link>
+          }
+        />
       </div>
     )
   }

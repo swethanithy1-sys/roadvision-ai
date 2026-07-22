@@ -1,19 +1,24 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import ProtectedRoute from './auth/ProtectedRoute'
 import RoleRoute from './auth/RoleRoute'
 import AppShell from './layouts/AppShell'
+import LoadingState from './components/LoadingState'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
 import DashboardPage from './features/dashboard-citizen/DashboardPage'
 import ReportDamagePage from './features/report-damage/ReportDamagePage'
 import MyReportsPage from './features/my-reports/MyReportsPage'
 import ReportDetailsPage from './features/report-details/ReportDetailsPage'
-import AnalyticsPage from './features/analytics/AnalyticsPage'
-import HazardMapPage from './features/hazard-map/HazardMapPage'
 import AdminDashboardPage from './features/dashboard-admin/AdminDashboardPage'
 import RepairManagementPage from './features/repair-management/RepairManagementPage'
 import WorkOrderPage from './features/work-order/WorkOrderPage'
+
+// Recharts and Leaflet are the two heaviest dependencies in the bundle;
+// only citizens/admins who actually open these pages should pay for them.
+const AnalyticsPage = lazy(() => import('./features/analytics/AnalyticsPage'))
+const HazardMapPage = lazy(() => import('./features/hazard-map/HazardMapPage'))
 
 function homePathFor(user) {
   return user?.role === 'ADMIN' ? '/admin' : '/dashboard'
@@ -27,6 +32,10 @@ function PublicOnlyRoute({ children }) {
 function RoleHomeRedirect() {
   const { user } = useAuth()
   return <Navigate to={homePathFor(user)} replace />
+}
+
+function LazyPage({ children }) {
+  return <Suspense fallback={<LoadingState label="Loading…" />}>{children}</Suspense>
 }
 
 function AppRoutes() {
@@ -55,8 +64,22 @@ function AppRoutes() {
           <Route path="/report-damage" element={<ReportDamagePage />} />
           <Route path="/my-reports" element={<MyReportsPage />} />
           <Route path="/my-reports/:id" element={<ReportDetailsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/hazard-map" element={<HazardMapPage />} />
+          <Route
+            path="/analytics"
+            element={
+              <LazyPage>
+                <AnalyticsPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/hazard-map"
+            element={
+              <LazyPage>
+                <HazardMapPage />
+              </LazyPage>
+            }
+          />
 
           <Route element={<RoleRoute allow={['ADMIN']} />}>
             <Route path="/admin" element={<AdminDashboardPage />} />

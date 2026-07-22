@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -12,9 +12,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import ErrorState from '../../components/ErrorState'
+import LoadingState from '../../components/LoadingState'
 import StatCard from '../../components/StatCard'
 import { fetchAnalyticsOverview } from '../../api/analyticsApi'
-import { CHART_GRID, CHART_PRIMARY, CHART_TEXT, SEVERITY_COLORS, SEVERITY_ORDER } from './chartTheme'
+import { useColorScheme } from '../../hooks/useColorScheme'
+import { CHART_COLORS, CHART_PRIMARY, SEVERITY_COLORS, SEVERITY_ORDER } from './chartTheme'
 
 const SEVERITY_LABELS = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' }
 
@@ -30,32 +33,39 @@ export default function AnalyticsPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const scheme = useColorScheme()
+  const { grid: CHART_GRID, text: CHART_TEXT } = CHART_COLORS[scheme]
+  const tooltipStyle = {
+    contentStyle: {
+      backgroundColor: scheme === 'dark' ? '#111827' : '#ffffff',
+      border: `1px solid ${CHART_GRID}`,
+      borderRadius: 8,
+      color: scheme === 'dark' ? '#f1f5f9' : '#0f172a',
+      fontSize: 13,
+    },
+    labelStyle: { color: CHART_TEXT },
+  }
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
 
     fetchAnalyticsOverview()
-      .then((overview) => {
-        if (!cancelled) setData(overview)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.friendlyMessage || 'Failed to load analytics.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .then(setData)
+      .catch((err) => setError(err.friendlyMessage || 'Failed to load analytics.'))
+      .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    load()
+  }, [load])
+
   if (loading) {
-    return <div className="card p-4 text-center text-muted-app">Loading analytics…</div>
+    return <LoadingState label="Loading analytics…" />
   }
 
   if (error || !data) {
-    return <div className="alert alert-danger">{error || 'No analytics available.'}</div>
+    return <ErrorState message={error || 'No analytics available.'} onRetry={load} />
   }
 
   const severityData = SEVERITY_ORDER.map((severity) => ({
@@ -103,6 +113,7 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="label" tick={{ fill: CHART_TEXT, fontSize: 12 }} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
                   <YAxis allowDecimals={false} tick={{ fill: CHART_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
                   <Tooltip
+                    {...tooltipStyle}
                     cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }}
                     formatter={(value) => [`${value} report${value === 1 ? '' : 's'}`, 'Count']}
                   />
@@ -135,7 +146,7 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                   <XAxis dataKey="month" tick={{ fill: CHART_TEXT, fontSize: 12 }} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
                   <YAxis allowDecimals={false} tick={{ fill: CHART_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(value) => [`${value} report${value === 1 ? '' : 's'}`, 'Reports']} />
+                  <Tooltip {...tooltipStyle} formatter={(value) => [`${value} report${value === 1 ? '' : 's'}`, 'Reports']} />
                   <Line
                     type="monotone"
                     dataKey="count"
@@ -173,7 +184,7 @@ export default function AnalyticsPage() {
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip formatter={(value) => [`${value} report${value === 1 ? '' : 's'}`, 'Reports']} />
+              <Tooltip {...tooltipStyle} formatter={(value) => [`${value} report${value === 1 ? '' : 's'}`, 'Reports']} />
               <Bar dataKey="count" name="Reports" fill={CHART_PRIMARY} radius={[0, 4, 4, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>

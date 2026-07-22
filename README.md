@@ -2,7 +2,7 @@
 
 AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock today, YOLOv8/OpenCV-ready tomorrow) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
-> **Status: Phase 4 of 5** — scaffold, auth, reporting + mock AI detection, citizen dashboard, Analytics, Hazard Map, and the full Admin/Repair Management/Work Order workflow are complete and verified end-to-end. Only final polish remains (see [Roadmap](#roadmap)).
+> **Status: Phase 5 of 5 — complete.** Every module from the original spec is implemented and verified end-to-end: auth, reporting + mock AI detection, citizen dashboard, Analytics, Hazard Map, Admin/Repair Management/Work Orders, plus a final polish pass (dark mode across charts/map, reusable loading/error/empty states, success toasts, responsive fixes, lazy-loaded routes). See [Roadmap](#roadmap) for what shipped in each phase.
 
 ## Architecture
 
@@ -153,8 +153,25 @@ New citizen accounts can also self-register via `/register`; the API always assi
 2. **Phase 2 (done)** — Report submission (image upload/capture + GPS/manual location), mock AI detection (deterministic, per-image), automatic repair priority/cost estimation, My Reports, Report Details with bounding-box overlay and status timeline.
 3. **Phase 3 (done)** — Live citizen dashboard (stats, road safety score, recent activity), Analytics dashboard (severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas — Recharts), Hazard Map (Leaflet/OSM, severity-colored markers, popup details).
 4. **Phase 4 (done)** — Admin Dashboard (fleet-wide stats + recent reports), Repair Management (list/filter all reports, assign priority, update status), printable Work Order generation (materials, labor, duration, signature lines).
-5. **Phase 5** — Polish: dark mode completeness, responsive audit, empty/loading/error states, final documentation pass.
+5. **Phase 5 (done)** — Polish pass: theme-aware charts and map tiles in dark mode (Recharts axes/tooltips/grid, Leaflet tile filter + popup styling), reusable `LoadingState`/`ErrorState`/`EmptyState`/`Toast` components applied across every page, success toasts on Repair Management actions, a null-pointer fix on the citizen dashboard's error path, responsive fixes (work order materials list, detail list, hazard map height on small screens), and route-level code-splitting for the Recharts/Leaflet pages (818 KB → 255 KB main bundle).
 
 ## Design System
 
 Theme tokens live in `frontend/src/styles/theme.css` as CSS custom properties (`--color-primary: #2563EB`, `--color-secondary: #10B981`, `--color-accent: #F59E0B`, `--color-bg: #F8FAFC`), with a dark-mode override block and a `data-theme` toggle persisted to `localStorage`. Bootstrap 5 supplies grid/utility classes only; visual identity (cards, buttons, pills, stat tiles) is defined in `global.css`/`shell.css` on top of the token layer.
+
+Recharts and Leaflet render to `<canvas>`/SVG, so they can't read CSS variables directly — `frontend/src/hooks/useColorScheme.js` tracks the active theme (manual toggle + OS preference) so `AnalyticsPage` and `HazardMapPage` can pick matching colors/tile filters per scheme instead of hardcoding one.
+
+## UI Building Blocks
+
+Every data-fetching page follows the same shape — a `load()` callback (retryable), and `LoadingState` / `ErrorState` / `EmptyState` from `frontend/src/components/` for the three non-happy-path states, so the pattern only had to be designed once:
+
+```jsx
+const load = useCallback(() => { setLoading(true); setError(''); fetchX().then(setData).catch(e => setError(e.friendlyMessage)).finally(() => setLoading(false)) }, [])
+useEffect(() => { load() }, [load])
+
+if (loading) return <LoadingState label="…" />
+if (error) return <ErrorState message={error} onRetry={load} />
+// empty-list case: <EmptyState title=".." description=".." action={<Link .. />} />
+```
+
+`components/Toast.jsx` gives lightweight, auto-dismissing success feedback (used on Repair Management's status/priority updates); `ApiResponse`'s validation-error shape flows through to inline `FormField` errors on the auth/report forms.

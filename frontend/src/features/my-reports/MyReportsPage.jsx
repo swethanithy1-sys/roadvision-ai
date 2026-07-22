@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import EmptyState from '../../components/EmptyState'
+import ErrorState from '../../components/ErrorState'
+import LoadingState from '../../components/LoadingState'
 import SeverityPill from '../../components/SeverityPill'
 import StatusPill from '../../components/StatusPill'
 import { assetUrl } from '../../api/assetUrl'
@@ -12,23 +15,18 @@ function formatDate(iso) {
 export default function MyReportsPage() {
   const [state, setState] = useState({ loading: true, error: '', reports: [] })
 
-  useEffect(() => {
-    let cancelled = false
-
+  const load = useCallback(() => {
+    setState((prev) => ({ ...prev, loading: true, error: '' }))
     fetchMyReports(0, 50)
-      .then((data) => {
-        if (!cancelled) setState({ loading: false, error: '', reports: data.content })
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setState({ loading: false, error: err.friendlyMessage || 'Failed to load your reports.', reports: [] })
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .then((data) => setState({ loading: false, error: '', reports: data.content }))
+      .catch((err) =>
+        setState({ loading: false, error: err.friendlyMessage || 'Failed to load your reports.', reports: [] })
+      )
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   return (
     <div>
@@ -42,19 +40,21 @@ export default function MyReportsPage() {
         </Link>
       </div>
 
-      {state.loading && <div className="card p-4 text-center text-muted-app">Loading your reports…</div>}
+      {state.loading && <LoadingState label="Loading your reports…" />}
 
-      {!state.loading && state.error && <div className="alert alert-danger">{state.error}</div>}
+      {!state.loading && state.error && <ErrorState message={state.error} onRetry={load} />}
 
       {!state.loading && !state.error && state.reports.length === 0 && (
         <div className="card p-4">
-          <div className="empty-state">
-            <h2 className="h6 fw-semibold mb-2">No reports yet</h2>
-            <p className="mb-3 small">You haven&apos;t reported any road damage. Submit your first report to get started.</p>
-            <Link to="/report-damage" className="btn btn-app-primary">
-              Report damage
-            </Link>
-          </div>
+          <EmptyState
+            title="No reports yet"
+            description="You haven't reported any road damage. Submit your first report to get started."
+            action={
+              <Link to="/report-damage" className="btn btn-app-primary">
+                Report damage
+              </Link>
+            }
+          />
         </div>
       )}
 

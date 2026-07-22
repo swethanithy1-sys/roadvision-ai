@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
+import ErrorState from '../../components/ErrorState'
 import SeverityPill from '../../components/SeverityPill'
 import StatusPill from '../../components/StatusPill'
 import { assetUrl } from '../../api/assetUrl'
 import { fetchReportMap } from '../../api/reportApi'
+import { useColorScheme } from '../../hooks/useColorScheme'
 import { SEVERITY_COLORS } from '../analytics/chartTheme'
 
 const DEFAULT_CENTER = [12.9716, 77.5946] // Bengaluru
@@ -17,25 +19,21 @@ export default function HazardMapPage() {
   const [markers, setMarkers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const scheme = useColorScheme()
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
 
     fetchReportMap()
-      .then((data) => {
-        if (!cancelled) setMarkers(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.friendlyMessage || 'Failed to load the hazard map.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
+      .then(setMarkers)
+      .catch((err) => setError(err.friendlyMessage || 'Failed to load the hazard map.'))
+      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   const center = markers.length > 0 ? [markers[0].latitude, markers[0].longitude] : DEFAULT_CENTER
 
@@ -62,7 +60,11 @@ export default function HazardMapPage() {
         </div>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && <ErrorState message={error} onRetry={load} />}
+
+      {!loading && !error && markers.length === 0 && (
+        <div className="alert alert-info small mb-3">No hazards have been reported yet — the map will populate as citizens submit reports.</div>
+      )}
 
       <div className="card p-2 hazard-map-card">
         {loading ? (
@@ -70,6 +72,7 @@ export default function HazardMapPage() {
         ) : (
           <MapContainer center={center} zoom={DEFAULT_ZOOM} scrollWheelZoom className="hazard-map">
             <TileLayer
+              className={scheme === 'dark' ? 'hazard-map__tiles--dark' : ''}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import ErrorState from '../../components/ErrorState'
+import LoadingState from '../../components/LoadingState'
 import SeverityPill from '../../components/SeverityPill'
 import { assetUrl } from '../../api/assetUrl'
 import { fetchWorkOrder, generateWorkOrder } from '../../api/workOrderApi'
@@ -37,11 +39,11 @@ export default function WorkOrderPage() {
   }, [load])
 
   if (loading) {
-    return <div className="card p-4 text-center text-muted-app">Preparing work order…</div>
+    return <LoadingState label="Preparing work order…" />
   }
 
   if (error || !workOrder) {
-    return <div className="alert alert-danger">{error || 'Work order not available.'}</div>
+    return <ErrorState message={error || 'Work order not available.'} onRetry={load} />
   }
 
   const { report } = workOrder
