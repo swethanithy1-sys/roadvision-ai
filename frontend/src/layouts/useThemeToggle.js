@@ -13,6 +13,10 @@ export function useThemeToggle() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
+    // Drive Bootstrap 5.3's native dark mode in sync, so all Bootstrap components
+    // (tables, form-selects, dropdown carets, etc.) switch — not just the ones we
+    // style directly.
+    document.documentElement.setAttribute('data-bs-theme', theme)
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
