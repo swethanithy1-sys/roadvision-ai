@@ -2,6 +2,7 @@ package com.roadvision.detection;
 
 import com.roadvision.common.constants.DamageType;
 import com.roadvision.common.constants.Severity;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -18,6 +19,7 @@ import java.util.Random;
  * photos plausibly vary in damage type, severity, and confidence.
  */
 @Service
+@ConditionalOnProperty(name = "app.ai.provider", havingValue = "mock", matchIfMissing = true)
 public class MockAIDetectionServiceImpl implements AIDetectionService {
 
     private static final DamageType[] DAMAGE_TYPES = DamageType.values();

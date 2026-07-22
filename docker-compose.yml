@@ -31,5 +31,18 @@ services:
       postgres:
         condition: service_healthy
 
+  ai-service:
+    build: ./ai-service
+    container_name: roadvision-ai-service
+    restart: unless-stopped
+    profiles: ["ai"]
+    environment:
+      MODEL_PATH: /app/weights/pothole.pt
+      CONFIDENCE_THRESHOLD: "0.25"
+    ports:
+      - "8000:7860"
+    volumes:
+      - ./ai-service/weights:/app/weights
+
 volumes:
   roadvision-pgdata:

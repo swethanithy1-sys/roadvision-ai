@@ -45,6 +45,10 @@ app:
     public-path: ${UPLOAD_PUBLIC_PATH:/api/uploads}
   seed:
     enabled: ${SEED_ENABLED:true}
+  ai:
+    provider: ${AI_PROVIDER:mock}
+    service-url: ${AI_SERVICE_URL:http://localhost:8000}
+    timeout-ms: ${AI_SERVICE_TIMEOUT_MS:15000}
 
 logging:
   level:

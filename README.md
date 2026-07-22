@@ -1,6 +1,6 @@
 # RoadVision AI
 
-AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock today, YOLOv8/OpenCV-ready tomorrow) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
+AI-powered Smart Road Infrastructure Monitoring and Maintenance Management System. Citizens report road damage with photos; a pluggable AI detection service (mock by default, a real FastAPI+YOLOv8 microservice optionally) classifies severity, estimates repair cost, and feeds municipal dashboards, a hazard map, and repair workflows.
 
 > **Status: Phase 5 of 5 — complete.** Every module from the original spec is implemented and verified end-to-end: auth, reporting + mock AI detection, citizen dashboard, Analytics, Hazard Map, Admin/Repair Management/Work Orders, plus a final polish pass (dark mode across charts/map, reusable loading/error/empty states, success toasts, responsive fixes, lazy-loaded routes). See [Roadmap](#roadmap) for what shipped in each phase.
 
@@ -16,7 +16,7 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── security/    JWT issuance & validation, Spring Security filter chain
   ├── auth/        register / login
   ├── user/        user profile
-  ├── detection/    AIDetectionService interface → MockAIDetectionServiceImpl
+  ├── detection/    AIDetectionService interface → Mock impl (default) or Real impl (calls ai-service/)
   ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
   ├── report/       submit / list / get / status timeline / map markers / admin list+status+priority, RepairEstimator
   ├── analytics/    citizen + admin dashboard summaries, city-wide overview (aggregated in-memory from ReportRepository)
@@ -30,11 +30,22 @@ Every endpoint returns a consistent envelope:
 { "success": true, "message": "...", "data": { ... }, "timestamp": "..." }
 ```
 
-The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a real FastAPI/YOLOv8 service later purely by adding a new `AIDetectionService` implementation — no frontend or controller changes required. Same pattern for file storage: `LocalFileStorageServiceImpl` today, `S3FileStorageServiceImpl` later, behind `FileStorageService`.
+The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a real detection backend purely by adding a new `AIDetectionService` implementation — no frontend or controller changes required. Same pattern for file storage: `LocalFileStorageServiceImpl` today, `S3FileStorageServiceImpl` later, behind `FileStorageService`.
 
 ### Mock AI Detection
 
-`MockAIDetectionServiceImpl` seeds a `Random` from a SHA-256 hash of the uploaded image bytes, so **the same photo always produces the same damage type, severity, confidence, and bounding boxes** — useful for demos and repeatable testing — while different photos plausibly vary. Repair priority and estimated cost are computed separately by `RepairEstimator` from the detected severity/damage type, kept out of the AI service since that's pricing/policy logic, not computer vision.
+`MockAIDetectionServiceImpl` seeds a `Random` from a SHA-256 hash of the uploaded image bytes, so **the same photo always produces the same damage type, severity, confidence, and bounding boxes** — useful for demos and repeatable testing — while different photos plausibly vary. Repair priority and estimated cost are computed separately by `RepairEstimator` from the detected severity/damage type, kept out of the AI service since that's pricing/policy logic, not computer vision. This is the active implementation by default (`AI_PROVIDER=mock`).
+
+### Real AI Detection (optional)
+
+`ai-service/` is a standalone FastAPI + YOLOv8 microservice (deployable free on Hugging Face Spaces — see `ai-service/README.md`) that does the actual computer-vision inference. `RealAIDetectionServiceImpl` calls it over HTTP, then applies the same severity-classification responsibility the mock has (box size + confidence → LOW/MEDIUM/HIGH) — the Python service intentionally returns only raw detections (class name, confidence, box), keeping business rules in the backend. Switch to it with:
+
+```bash
+AI_PROVIDER=real
+AI_SERVICE_URL=https://<your-space>.hf.space   # or http://localhost:8000 for local docker compose
+```
+
+Both implementations are `@ConditionalOnProperty`-gated on `app.ai.provider` so only one is ever active — no code changes needed to switch, just the env var. Locally, `docker compose --profile ai up` builds and runs `ai-service/` alongside Postgres (requires a `pothole.pt` weights file in `ai-service/weights/` — gitignored, not committed; see `ai-service/README.md` for where to get one free).
 
 Uploaded images are written to `backend/uploads/reports/` and served back at `/api/uploads/reports/<file>` via a Spring resource handler (see `WebConfig`).
 
@@ -52,14 +63,16 @@ Computed by `AnalyticsService` (not a stored value) as `100 − average severity
 | Maps       | Leaflet + react-leaflet + OpenStreetMap tiles                      |
 | Charts     | Recharts 3                                                         |
 | Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
+| AI service (optional) | Python 3.11, FastAPI, Ultralytics YOLOv8, deployable on Hugging Face Spaces (free) |
 
 ## Project Structure
 
 ```
 roadvision-ai/
-├── backend/     Spring Boot API (Maven)
-├── frontend/    React + Vite SPA
-└── docker-compose.yml   PostgreSQL + pgAdmin
+├── backend/       Spring Boot API (Maven)
+├── frontend/      React + Vite SPA
+├── ai-service/    Optional FastAPI + YOLOv8 detection microservice
+└── docker-compose.yml   PostgreSQL + pgAdmin (+ ai-service under the "ai" profile)
 ```
 
 Backend package layout follows a **feature-package** convention (`auth/`, `user/`, `report/`, ...) with each feature internally layered Controller → Service → Repository → DTO/Mapper, plus a `common/` package for cross-cutting concerns (response envelope, exceptions, shared enums) and `security/`/`config/` for infrastructure. Frontend mirrors this with `features/<name>/` per module, `components/` for shared UI, `api/` for Axios clients, and `auth/` for session state.
@@ -141,11 +154,22 @@ New citizen accounts can also self-register via `/register`; the API always assi
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`.
 
 **Frontend** (`frontend/.env.example`): `VITE_API_BASE_URL`.
 
+**AI service** (`ai-service/README.md`): `MODEL_PATH`, `CONFIDENCE_THRESHOLD`.
+
 > `JWT_SECRET` ships with a development-only default — set a strong secret via environment variable before any real deployment.
+
+## Deployment Notes
+
+The app's own JWT auth and local-disk file storage are provider-agnostic, so:
+
+- **Database (Supabase, or any managed Postgres)** — Supabase's Postgres is just Postgres; point `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at its connection details and Flyway migrates it on first boot exactly like local Postgres. (This app doesn't use Supabase's own Auth or Storage products — it has its own JWT auth and `FileStorageService` abstraction. Swapping file storage to Supabase Storage or S3 later is a new `FileStorageService` implementation, same pattern as the AI provider switch above.)
+- **Backend (Render)** — deploy `backend/` as a Docker or Maven web service; set the env vars above (`DB_*`, `JWT_SECRET` — generate a real one, don't ship the dev default, `CORS_ALLOWED_ORIGINS` to your Vercel domain, `AI_PROVIDER=real` + `AI_SERVICE_URL` if using the AI microservice).
+- **Frontend (Vercel)** — deploy `frontend/`; set `VITE_API_BASE_URL` to your Render backend's public URL + `/api`.
+- **AI service (Hugging Face Spaces)** — see `ai-service/README.md`; set the backend's `AI_SERVICE_URL` to the Space's URL.
 
 ## Roadmap
 
