@@ -7,7 +7,7 @@ import java.math.BigDecimal;
  * {@link com.roadvision.detection.AIDetectionService} for the same reason
  * {@link RepairEstimator} is — pricing is business/domain logic, not computer vision.
  * {@link RuleBasedCostEstimatorImpl} (default) is a deterministic lookup formula;
- * {@link GroqCostEstimatorImpl} (opt-in) delegates the estimate to an LLM instead.
+ * {@link GeminiCostEstimatorImpl} (opt-in) delegates the estimate to an LLM instead.
  */
 public interface CostEstimator {
     BigDecimal estimateCost(CostEstimationContext context);

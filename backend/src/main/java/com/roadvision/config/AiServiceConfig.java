@@ -30,8 +30,8 @@ public class AiServiceConfig {
     }
 
     @Bean
-    public RestClient groqRestClient(
-            @Value("${app.cost.groq.base-url}") String baseUrl,
+    public RestClient geminiRestClient(
+            @Value("${app.cost.gemini.base-url}") String baseUrl,
             @Value("${app.ai.timeout-ms}") long timeoutMs
     ) {
         return buildClient(baseUrl, timeoutMs);
