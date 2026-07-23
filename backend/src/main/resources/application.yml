@@ -40,6 +40,7 @@ app:
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
   storage:
     upload-dir: ${UPLOAD_DIR:uploads}
     public-path: ${UPLOAD_PUBLIC_PATH:/api/uploads}
@@ -60,6 +61,13 @@ app:
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
       api-key: ${GEMINI_API_KEY:}
       model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+  email:
+    provider: ${EMAIL_PROVIDER:log}
+    resend:
+      base-url: ${RESEND_BASE_URL:https://api.resend.com}
+      api-key: ${RESEND_API_KEY:}
+      from: ${RESEND_FROM_EMAIL:RoadVision AI <onboarding@resend.dev>}
+      timeout-ms: ${RESEND_TIMEOUT_MS:10000}
 
 logging:
   level:

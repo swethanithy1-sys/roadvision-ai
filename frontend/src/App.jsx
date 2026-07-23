@@ -7,6 +7,9 @@ import AppShell from './layouts/AppShell'
 import LoadingState from './components/LoadingState'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
+import VerifyEmailPage from './features/auth/VerifyEmailPage'
+import ForgotPasswordPage from './features/auth/ForgotPasswordPage'
+import ResetPasswordPage from './features/auth/ResetPasswordPage'
 import DashboardPage from './features/dashboard-citizen/DashboardPage'
 import ReportDamagePage from './features/report-damage/ReportDamagePage'
 import MyReportsPage from './features/my-reports/MyReportsPage'
@@ -57,6 +60,9 @@ function AppRoutes() {
           </PublicOnlyRoute>
         }
       />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

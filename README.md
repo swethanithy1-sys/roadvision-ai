@@ -158,14 +158,42 @@ The app starts at `http://localhost:5173` and talks to the backend at `VITE_API_
 | Citizen | citizen1@roadvision.ai    | Password123!     |
 | Citizen | citizen2@roadvision.ai    | Password123!     |
 
-New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design). After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
+New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design). New accounts start unverified and must confirm their email before their first login — see "Email Verification & Password Reset" below. After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
+
+### Email Verification & Password Reset
+
+Registration no longer logs the user straight in. Instead:
+
+1. `POST /auth/register` creates the account (`email_verified = false`), issues a single-use, 24-hour `EMAIL_VERIFICATION` token, and emails a verification link (`{FRONTEND_URL}/verify-email?token=...`). The response has no JWT — the frontend shows a "check your email" screen.
+2. `POST /auth/login` rejects unverified accounts with `403` before checking anything else about the session; the frontend surfaces a "Resend verification email" action backed by `POST /auth/resend-verification`.
+3. Clicking the email link hits `POST /auth/verify-email` with the token, which marks the account verified, consumes the token, and — as a convenience — returns a JWT so the user lands straight in the app instead of having to log in again.
+4. "Forgot password" (`POST /auth/forgot-password`) issues a single-use, 1-hour `PASSWORD_RESET` token and emails a reset link (`{FRONTEND_URL}/reset-password?token=...`). Both this and resend-verification always return the same generic success message regardless of whether the email exists, to avoid leaking which addresses are registered.
+5. `POST /auth/reset-password` consumes the token and updates the password hash; the user then logs in normally with the new password.
+
+Tokens live in a dedicated `auth_tokens` table (`type` = `EMAIL_VERIFICATION` or `PASSWORD_RESET`, single-use via `used_at`, time-boxed via `expires_at`) rather than reusing the `users` table, so a token's lifecycle is independent of the account itself.
+
+Sending is behind its own pluggable `EmailService` (`app.email.provider`, same `@ConditionalOnProperty` pattern as everywhere else):
+
+- **Log (default, `EMAIL_PROVIDER=log` or unset)** — `LogEmailServiceImpl` just logs the verification/reset link instead of sending real email. Zero setup, and how the flow above was verified end-to-end locally.
+- **Resend (optional, `EMAIL_PROVIDER=resend`)** — `ResendEmailServiceImpl` sends real, on-brand HTML email via [Resend](https://resend.com)'s free REST API (100 emails/day, no card required). Switch to it with:
+
+```bash
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=<your free key from resend.com/api-keys>
+```
+
+`RESEND_FROM_EMAIL` defaults to Resend's shared `onboarding@resend.dev` sender, which needs no domain verification but is documented by Resend as testing-only and reliably delivers only to your own Resend account email — verify a domain you own in the Resend dashboard and point `RESEND_FROM_EMAIL` at it (e.g. `RoadVision AI <noreply@yourdomain.com>`) before relying on this for real users. Sending failures never block registration or password reset — they're logged and the user can always request a resend.
 
 ## API Reference
 
 | Method | Endpoint                    | Auth        | Description                                    |
 |--------|-------------------------------|-------------|--------------------------------------------------|
-| POST   | `/api/auth/register`         | Public      | Create a citizen account, returns JWT             |
-| POST   | `/api/auth/login`            | Public      | Authenticate, returns JWT                         |
+| POST   | `/api/auth/register`         | Public      | Create an unverified citizen account; sends a verification email |
+| POST   | `/api/auth/login`            | Public      | Authenticate, returns JWT (403 if email unverified) |
+| POST   | `/api/auth/verify-email`     | Public      | Confirm email via token, returns JWT (auto-login) |
+| POST   | `/api/auth/resend-verification` | Public   | Re-send the verification email                    |
+| POST   | `/api/auth/forgot-password`  | Public      | Send a password reset email                        |
+| POST   | `/api/auth/reset-password`   | Public      | Reset password via token                           |
 | GET    | `/api/users/me`              | Bearer JWT  | Current authenticated user profile                |
 | GET    | `/api/users/admin/ping`      | Bearer JWT (ADMIN) | Role-guard smoke test                      |
 | POST   | `/api/reports`               | Bearer JWT  | Submit a report (multipart: `image` + `report` JSON part); runs mock AI detection synchronously |
@@ -186,7 +214,9 @@ New citizen accounts can also self-register via `/register`; the API always assi
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMAIL_PROVIDER`, `RESEND_BASE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_TIMEOUT_MS`.
+
+> `FRONTEND_URL` is used server-side to build the links inside verification/reset emails (`{FRONTEND_URL}/verify-email?token=...`) — set it to your deployed frontend's URL, not just for CORS.
 
 > Set `SEED_ENABLED=false` once you've moved past demo data — `DataSeeder`/`ReportSeeder` only insert when their tables are empty, so disabling seeding after a manual reset (`DELETE FROM ...`) keeps the fake sample reports from coming back on the next restart.
 

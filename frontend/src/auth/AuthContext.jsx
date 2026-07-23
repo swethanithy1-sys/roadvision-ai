@@ -25,7 +25,17 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (payload) => {
     setIsLoading(true)
     try {
-      const data = await authApi.register(payload)
+      // Accounts start unverified — no session yet; the user must confirm their email first.
+      return await authApi.register(payload)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const verifyEmail = useCallback(async (token) => {
+    setIsLoading(true)
+    try {
+      const data = await authApi.verifyEmail(token)
       saveSession(data.token, data.user)
       setToken(data.token)
       setUser(data.user)
@@ -50,9 +60,10 @@ export function AuthProvider({ children }) {
       isLoading,
       login,
       register,
+      verifyEmail,
       logout,
     }),
-    [user, token, isLoading, login, register, logout]
+    [user, token, isLoading, login, register, verifyEmail, logout]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

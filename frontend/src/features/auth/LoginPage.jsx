@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AlertBanner from '../../components/AlertBanner'
 import FormField from '../../components/FormField'
 import { useAuth } from '../../auth/AuthContext'
+import { resendVerification } from '../../api/authApi'
 
 export default function LoginPage() {
   const { login, isLoading } = useAuth()
@@ -11,21 +12,37 @@ export default function LoginPage() {
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resendState, setResendState] = useState('idle') // idle | sending | sent
 
   const from = location.state?.from?.pathname
+  const resetSuccess = location.state?.resetSuccess
 
   function handleChange(e) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    setNeedsVerification(false)
+    setResendState('idle')
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setNeedsVerification(false)
     try {
       const loggedInUser = await login(form.email, form.password)
       navigate(from || (loggedInUser.role === 'ADMIN' ? '/admin' : '/dashboard'), { replace: true })
     } catch (err) {
       setError(err.friendlyMessage || 'Unable to log in. Please check your credentials.')
+      setNeedsVerification(err.response?.status === 403)
+    }
+  }
+
+  async function handleResend() {
+    setResendState('sending')
+    try {
+      await resendVerification(form.email)
+    } finally {
+      setResendState('sent')
     }
   }
 
@@ -67,7 +84,33 @@ export default function LoginPage() {
               <p className="text-muted-app small mb-0">Sign in to your RoadVision AI account</p>
             </div>
 
+            {resetSuccess && !error && (
+              <div className="alert alert-success py-2 small mb-3">
+                Password reset successfully. You can now sign in.
+              </div>
+            )}
+
             <AlertBanner>{error}</AlertBanner>
+
+            {needsVerification && (
+              <div className="alert alert-warning py-2 small mb-3">
+                {resendState === 'sent' ? (
+                  <>Verification email sent — check your inbox.</>
+                ) : (
+                  <>
+                    Haven&apos;t verified your email yet?{' '}
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0 align-baseline"
+                      onClick={handleResend}
+                      disabled={resendState === 'sending'}
+                    >
+                      {resendState === 'sending' ? 'Sending…' : 'Resend verification email'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} noValidate>
               <FormField label="Email address" htmlFor="email">
@@ -84,7 +127,15 @@ export default function LoginPage() {
                 />
               </FormField>
 
-              <FormField label="Password" htmlFor="password">
+              <div className="mb-3">
+                <div className="d-flex justify-content-between align-items-baseline">
+                  <label htmlFor="password" className="form-label fw-semibold">
+                    Password
+                  </label>
+                  <Link to="/forgot-password" className="small">
+                    Forgot password?
+                  </Link>
+                </div>
                 <input
                   id="password"
                   name="password"
@@ -96,7 +147,7 @@ export default function LoginPage() {
                   required
                   autoComplete="current-password"
                 />
-              </FormField>
+              </div>
 
               <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isLoading}>
                 {isLoading ? 'Signing in…' : 'Sign in'}

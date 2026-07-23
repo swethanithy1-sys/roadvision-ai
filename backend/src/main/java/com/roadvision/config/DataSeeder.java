@@ -36,16 +36,22 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        userRepository.save(new User(
-                "Admin User", "admin@roadvision.ai", passwordEncoder.encode(DEMO_PASSWORD), "9000000001", Role.ADMIN
+        userRepository.save(verifiedDemoUser(
+                "Admin User", "admin@roadvision.ai", "9000000001", Role.ADMIN
         ));
-        userRepository.save(new User(
-                "Asha Rao", "citizen1@roadvision.ai", passwordEncoder.encode(DEMO_PASSWORD), "9000000002", Role.CITIZEN
+        userRepository.save(verifiedDemoUser(
+                "Asha Rao", "citizen1@roadvision.ai", "9000000002", Role.CITIZEN
         ));
-        userRepository.save(new User(
-                "Vikram Singh", "citizen2@roadvision.ai", passwordEncoder.encode(DEMO_PASSWORD), "9000000003", Role.CITIZEN
+        userRepository.save(verifiedDemoUser(
+                "Vikram Singh", "citizen2@roadvision.ai", "9000000003", Role.CITIZEN
         ));
 
         log.info("Seeded demo accounts (admin@roadvision.ai / citizen1@roadvision.ai / citizen2@roadvision.ai), password: {}", DEMO_PASSWORD);
+    }
+
+    private User verifiedDemoUser(String fullName, String email, String phone, Role role) {
+        User user = new User(fullName, email, passwordEncoder.encode(DEMO_PASSWORD), phone, role);
+        user.setEmailVerified(true);
+        return user;
     }
 }
