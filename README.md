@@ -66,7 +66,7 @@ Uploaded images are written to `backend/uploads/reports/` and served back at `/a
 Estimated repair cost is a separate concern from damage detection, behind its own `CostEstimator` abstraction — same pluggable-provider pattern as `AIDetectionService`.
 
 - **Rule-based (default, `COST_PROVIDER=rule` or unset)** — `RuleBasedCostEstimatorImpl` delegates to `RepairEstimator`'s deterministic formula: a base cost per damage type (pothole/crack/surface damage) multiplied by a severity multiplier (LOW ×1.0, MEDIUM ×1.6, HIGH ×2.4). Free, instant, no external dependency.
-- **Gemini LLM-based (optional, `COST_PROVIDER=gemini`)** — `GeminiCostEstimatorImpl` asks Google's free Gemini API (`gemini-2.5-flash` by default) to estimate a realistic INR repair cost from the damage type, severity, AI confidence, and report location/description, via the Gemini Interactions API with a JSON response schema constraining the output shape, parsed into `GeminiCostEstimate`. **On any failure** (network error, malformed response, rate limit) it transparently falls back to the same rule-based formula above — a report submission never fails just because the LLM call did. Switch to it with:
+- **Gemini LLM-based (optional, `COST_PROVIDER=gemini`)** — `GeminiCostEstimatorImpl` asks Google's free Gemini API (`gemini-3.5-flash-lite` by default) to estimate a realistic INR repair cost from the damage type, severity, AI confidence, and report location/description, via the Gemini Interactions API with a JSON response schema constraining the output shape. The reply text is nested inside `steps[]` (the `model_output` step's `content[].text`), parsed into `GeminiCostEstimate`. **On any failure** (network error, malformed response, rate limit) it transparently falls back to the same rule-based formula above — a report submission never fails just because the LLM call did. Switch to it with:
 
 ```bash
 COST_PROVIDER=gemini
@@ -94,7 +94,7 @@ Computed by `AnalyticsService` (not a stored value) as `100 − average severity
 | Charts     | Recharts 3                                                         |
 | Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
 | AI service (optional) | Roboflow hosted inference API (free tier), or self-hosted Python 3.11 + FastAPI + Ultralytics YOLOv8 on Hugging Face Spaces (free) |
-| Cost estimation (optional) | Google's free Gemini API (`gemini-2.5-flash`), with automatic fallback to a rule-based formula |
+| Cost estimation (optional) | Google's free Gemini API (`gemini-3.5-flash-lite`), with automatic fallback to a rule-based formula |
 | Geocoding  | OpenStreetMap Nominatim (free, reverse geocoding for GPS-based reports)          |
 
 ## Project Structure

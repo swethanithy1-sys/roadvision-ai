@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * Delegates repair cost estimation to an LLM via Google's free Gemini Interactions API. Falls
@@ -81,13 +82,24 @@ public class GeminiCostEstimatorImpl implements CostEstimator {
                     .retrieve()
                     .body(GeminiInteractionResponse.class);
 
-            GeminiCostEstimate estimate = objectMapper.readValue(response.outputText(), GeminiCostEstimate.class);
+            String content = extractModelOutputText(response);
+            GeminiCostEstimate estimate = objectMapper.readValue(content, GeminiCostEstimate.class);
 
             return BigDecimal.valueOf(estimate.estimatedCostInr()).setScale(2, RoundingMode.HALF_UP);
         } catch (Exception ex) {
             log.error("Gemini cost estimation failed, falling back to the rule-based estimator", ex);
             return repairEstimator.estimateCost(context.damageType(), context.severity());
         }
+    }
+
+    private String extractModelOutputText(GeminiInteractionResponse response) {
+        return response.steps().stream()
+                .filter(step -> "model_output".equals(step.type()))
+                .flatMap(step -> step.content() == null ? Stream.empty() : step.content().stream())
+                .filter(part -> "text".equals(part.type()))
+                .map(GeminiInteractionResponse.GeminiContentPart::text)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No model_output text part found in Gemini response"));
     }
 
     private String buildUserPrompt(CostEstimationContext context) {
