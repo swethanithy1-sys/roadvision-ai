@@ -1,21 +1,14 @@
 package com.roadvision.report;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ReportMapper {
 
-    private final String uploadsPublicPath;
-
-    public ReportMapper(@Value("${app.storage.public-path:/uploads}") String uploadsPublicPath) {
-        this.uploadsPublicPath = uploadsPublicPath;
-    }
-
     public ReportResponse toResponse(Report report) {
         return new ReportResponse(
                 report.getId(),
-                uploadsPublicPath + "/" + report.getImagePath(),
+                report.getImagePath(),
                 report.getLatitude(),
                 report.getLongitude(),
                 report.getAddressText(),
@@ -36,7 +29,7 @@ public class ReportMapper {
     public ReportMapMarker toMapMarker(Report report) {
         return new ReportMapMarker(
                 report.getId(),
-                uploadsPublicPath + "/" + report.getImagePath(),
+                report.getImagePath(),
                 report.getLatitude(),
                 report.getLongitude(),
                 report.getAddressText(),

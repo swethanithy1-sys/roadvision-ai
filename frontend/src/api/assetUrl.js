@@ -3,5 +3,6 @@ const BACKEND_ORIGIN = new URL(API_BASE_URL).origin
 
 export function assetUrl(path) {
   if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
   return `${BACKEND_ORIGIN}${path}`
 }

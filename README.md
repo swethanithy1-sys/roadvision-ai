@@ -17,7 +17,8 @@ Spring Boot 3 API  ──────────────►  PostgreSQL 16
   ├── auth/        register / login
   ├── user/        user profile
   ├── detection/    AIDetectionService interface → Mock (default), Roboflow-hosted, or self-hosted ai-service/ impl
-  ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl
+  ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl (default) or SupabaseStorageServiceImpl
+  ├── email/        EmailService interface → LogEmailServiceImpl (default) or ResendEmailServiceImpl
   ├── report/       submit / list / get / status timeline / map markers / admin list+status+priority, RepairEstimator
   ├── analytics/    citizen + admin dashboard summaries, city-wide overview (aggregated in-memory from ReportRepository)
   ├── workorder/    printable work order generation (materials/labor/duration from RepairEstimator); race-safe create-or-fetch via an isolated REQUIRES_NEW transaction
@@ -30,7 +31,7 @@ Every endpoint returns a consistent envelope:
 { "success": true, "message": "...", "data": { ... }, "timestamp": "..." }
 ```
 
-The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a real detection backend purely by adding a new `AIDetectionService` implementation — no frontend or controller changes required. Same pattern for file storage: `LocalFileStorageServiceImpl` today, `S3FileStorageServiceImpl` later, behind `FileStorageService`.
+The AI layer is designed so `MockAIDetectionServiceImpl` can be swapped for a real detection backend purely by adding a new `AIDetectionService` implementation — no frontend or controller changes required. Same pattern for file storage (`FileStorageService`) and email (`EmailService`) — see below.
 
 ### Mock AI Detection
 
@@ -74,6 +75,22 @@ GEMINI_API_KEY=<your free key from aistudio.google.com/apikey>
 ```
 
 Both implementations are `@ConditionalOnProperty`-gated on `app.cost.provider` (`rule` / `gemini`), so only one is active at a time — no code changes needed to switch providers.
+
+### Report Photo Storage
+
+Uploaded report photos go through `FileStorageService`, same pluggable-provider pattern as everywhere else. `store()` always returns the file's final publicly-resolvable URL — callers never construct URLs themselves, which is what lets the two implementations differ so much internally.
+
+- **Local disk (default, `STORAGE_PROVIDER=local` or unset)** — `LocalFileStorageServiceImpl` writes to `backend/uploads/` and serves it back at `UPLOAD_PUBLIC_PATH` (`/api/uploads` by default) via a Spring resource handler (`WebConfig`). Simple, but the filesystem is only as durable as the host — fine for a single long-lived server, **lost on every redeploy/restart on hosts with no persistent disk** (e.g. Render's free tier).
+- **Supabase Storage (optional, `STORAGE_PROVIDER=supabase`)** — `SupabaseStorageServiceImpl` uploads to a public Supabase Storage bucket over its REST API instead, so photos survive redeploys regardless of the backend host's disk. Switch to it with:
+
+```bash
+STORAGE_PROVIDER=supabase
+SUPABASE_PROJECT_URL=https://<project-ref>.supabase.co
+SUPABASE_STORAGE_BUCKET=report-images   # must exist and be set to Public in the Supabase dashboard
+SUPABASE_SECRET_KEY=<your secret key (sb_secret_...), Project Settings -> API Keys>
+```
+
+Use the **secret key**, not the publishable key — Storage uploads need to bypass Row Level Security, which only the secret key (the modern replacement for the legacy `service_role` key) can do. Both implementations are `@ConditionalOnProperty`-gated on `app.storage.provider` (`local` / `supabase`).
 
 ### Location: GPS + Reverse Geocoding
 
@@ -214,7 +231,7 @@ RESEND_API_KEY=<your free key from resend.com/api-keys>
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SEED_ENABLED`, `LOG_LEVEL`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMAIL_PROVIDER`, `RESEND_BASE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_TIMEOUT_MS`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`, `SEED_ENABLED`, `LOG_LEVEL`, `STORAGE_PROVIDER`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SUPABASE_PROJECT_URL`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_SECRET_KEY`, `SUPABASE_TIMEOUT_MS`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMAIL_PROVIDER`, `RESEND_BASE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_TIMEOUT_MS`.
 
 > `FRONTEND_URL` is used server-side to build the links inside verification/reset emails (`{FRONTEND_URL}/verify-email?token=...`) — set it to your deployed frontend's URL, not just for CORS.
 
@@ -228,12 +245,13 @@ RESEND_API_KEY=<your free key from resend.com/api-keys>
 
 ## Deployment Notes
 
-The app's own JWT auth and local-disk file storage are provider-agnostic, so:
+The app's own JWT auth is provider-agnostic, and both file storage and email are behind pluggable abstractions (see above), so:
 
-- **Database (Supabase, or any managed Postgres)** — Supabase's Postgres is just Postgres; point `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at its connection details and Flyway migrates it on first boot exactly like local Postgres. (This app doesn't use Supabase's own Auth or Storage products — it has its own JWT auth and `FileStorageService` abstraction. Swapping file storage to Supabase Storage or S3 later is a new `FileStorageService` implementation, same pattern as the AI provider switch above.)
-- **Backend (Render)** — deploy `backend/` as a Docker or Maven web service; set the env vars above (`DB_*`, `JWT_SECRET` — generate a real one, don't ship the dev default, `CORS_ALLOWED_ORIGINS` to your Vercel domain, `AI_PROVIDER=real` + `AI_SERVICE_URL` if using the AI microservice).
+- **Database (Supabase, or any managed Postgres)** — Supabase's Postgres is just Postgres; point `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at its connection details and Flyway migrates it on first boot exactly like local Postgres. **Use the Session Pooler connection** (Project Settings → Database → "Session pooler" tab — host like `aws-0-<region>.pooler.supabase.com`, port `5432`, user `postgres.<project-ref>`), not the Direct connection: Supabase's direct connection requires IPv6, which many hosts (including Render) don't reliably support outbound, so it can work fine locally and then fail to connect once deployed. Verified end-to-end against a live Supabase project: both migrations apply cleanly to a fresh database, and the app runs fully against it (seeding, auth, report submission with Supabase Storage) with zero code changes beyond env vars. (This app doesn't use Supabase's own Auth product — it has its own JWT auth.)
+- **File storage & email** — `STORAGE_PROVIDER=supabase` + `EMAIL_PROVIDER=resend` for a fully-managed deployment with no local disk dependency; see the "Report Photo Storage" and "Email Verification & Password Reset" sections above for the exact env vars.
+- **Backend (Render)** — deploy `backend/` as a Docker or Maven web service; set the env vars above (`DB_*` from the Supabase session pooler, `JWT_SECRET` — generate a real one, don't ship the dev default, `CORS_ALLOWED_ORIGINS`/`FRONTEND_URL` to your Vercel domain, `STORAGE_PROVIDER=supabase` since Render's free tier has no persistent disk, `AI_PROVIDER=roboflow` + `COST_PROVIDER=gemini` for real AI, `EMAIL_PROVIDER=resend` for real email).
 - **Frontend (Vercel)** — deploy `frontend/`; set `VITE_API_BASE_URL` to your Render backend's public URL + `/api`.
-- **AI service (Hugging Face Spaces)** — see `ai-service/README.md`; set the backend's `AI_SERVICE_URL` to the Space's URL.
+- **AI service (Hugging Face Spaces)** — only needed if using `AI_PROVIDER=real` instead of the simpler `AI_PROVIDER=roboflow`; see `ai-service/README.md`; set the backend's `AI_SERVICE_URL` to the Space's URL.
 
 ## Roadmap
 

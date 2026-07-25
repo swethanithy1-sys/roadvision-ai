@@ -1,15 +1,17 @@
 package com.roadvision.storage;
 
 /**
- * Storage abstraction. {@link LocalFileStorageServiceImpl} writes to disk today; an
- * S3/Blob-backed implementation can be swapped in later via a Spring profile without
- * changing callers — they only ever deal in the relative path this returns.
+ * Storage abstraction. {@link LocalFileStorageServiceImpl} (default) writes to local disk;
+ * {@link SupabaseStorageServiceImpl} (opt-in) uploads to Supabase Storage instead — useful on
+ * hosts with no persistent disk (e.g. Render's free tier). Callers never construct URLs
+ * themselves — {@link #store} always returns the file's final publicly-resolvable URL.
  */
 public interface FileStorageService {
 
     /**
-     * @return the relative path (e.g. "reports/&lt;uuid&gt;.jpg") the file was stored under,
-     * to be persisted and later resolved against the public /uploads/** URL.
+     * @return the publicly resolvable URL of the stored file — root-relative (resolved
+     * against the backend's own origin) for local storage, or a fully-qualified absolute
+     * URL for externally-hosted storage.
      */
     String store(byte[] content, String originalFilename, String subDirectory);
 }

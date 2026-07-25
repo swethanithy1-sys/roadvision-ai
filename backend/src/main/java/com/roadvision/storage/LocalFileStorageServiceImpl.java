@@ -2,6 +2,7 @@ package com.roadvision.storage;
 
 import com.roadvision.common.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -12,12 +13,18 @@ import java.nio.file.Paths;
 import java.util.UUID;
 
 @Service
+@ConditionalOnProperty(name = "app.storage.provider", havingValue = "local", matchIfMissing = true)
 public class LocalFileStorageServiceImpl implements FileStorageService {
 
     private final Path uploadRoot;
+    private final String publicPath;
 
-    public LocalFileStorageServiceImpl(@Value("${app.storage.upload-dir}") String uploadDir) {
+    public LocalFileStorageServiceImpl(
+            @Value("${app.storage.upload-dir}") String uploadDir,
+            @Value("${app.storage.public-path}") String publicPath
+    ) {
         this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.publicPath = publicPath;
     }
 
     @Override
@@ -44,6 +51,6 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
             throw new IllegalStateException("Failed to store uploaded file", e);
         }
 
-        return relativePath;
+        return publicPath + "/" + relativePath;
     }
 }
