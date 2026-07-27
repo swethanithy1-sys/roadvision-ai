@@ -50,7 +50,7 @@ public class SupabaseAuthService {
      * set here is a throwaway — the user picks their real one at the end of the flow, once the
      * code has proven they own the address.
      */
-    public String generateSignupOtp(String email, String fullName, String phone) {
+    public GeneratedOtp generateSignupOtp(String email, String fullName, String phone) {
         return generateOtp(Map.of(
                 "type", TYPE_SIGNUP,
                 "email", email,
@@ -60,12 +60,12 @@ public class SupabaseAuthService {
     }
 
     /** Returns a one-time code for resetting an existing account's password. */
-    public String generateRecoveryOtp(String email) {
+    public GeneratedOtp generateRecoveryOtp(String email) {
         return generateOtp(Map.of("type", TYPE_RECOVERY, "email", email));
     }
 
     @SuppressWarnings("unchecked")
-    private String generateOtp(Map<String, Object> body) {
+    private GeneratedOtp generateOtp(Map<String, Object> body) {
         Map<String, Object> response = call(() -> authClient.post()
                 .uri("/admin/generate_link")
                 .header("apikey", secretKey)
@@ -78,7 +78,21 @@ public class SupabaseAuthService {
         if (otp == null) {
             throw new BadRequestException("Supabase did not return a verification code.");
         }
-        return otp;
+        return new GeneratedOtp(otp, (String) response.get("id"));
+    }
+
+    /**
+     * Removes an auth user (and, via the profiles FK cascade, its profile row). Used to roll back
+     * a half-finished signup whose verification code could not be delivered — leaving it in place
+     * would block the user from ever retrying that address.
+     */
+    public void deleteUser(String userId) {
+        call(() -> authClient.delete()
+                .uri("/admin/users/{id}", userId)
+                .header("apikey", secretKey)
+                .header("Authorization", "Bearer " + secretKey)
+                .retrieve()
+                .toBodilessEntity());
     }
 
     public OtpResult verifySignupOtp(String email, String otp) {
@@ -151,6 +165,9 @@ public class SupabaseAuthService {
             log.warn("Could not parse Supabase Auth error response", parseError);
         }
         return "Authentication request failed.";
+    }
+
+    public record GeneratedOtp(String code, String userId) {
     }
 
     public record OtpResult(String accessToken, String userId) {

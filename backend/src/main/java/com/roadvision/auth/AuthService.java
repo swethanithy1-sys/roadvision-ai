@@ -35,8 +35,18 @@ public class AuthService {
             );
         }
 
-        String code = supabaseAuthService.generateSignupOtp(email, request.fullName(), request.phone());
-        emailService.sendVerificationCode(email, request.fullName(), code);
+        SupabaseAuthService.GeneratedOtp otp =
+                supabaseAuthService.generateSignupOtp(email, request.fullName(), request.phone());
+
+        try {
+            emailService.sendVerificationCode(email, request.fullName(), otp.code());
+        } catch (RuntimeException ex) {
+            // The account exists by this point but the user will never receive their code, so it
+            // can't be completed — and leaving it behind would make this address permanently
+            // un-registerable (the duplicate check above would reject every retry). Roll it back.
+            rollBackHalfFinishedSignup(otp.userId(), email);
+            throw ex;
+        }
 
         return new RegisterResponse(request.email());
     }
@@ -67,9 +77,10 @@ public class AuthService {
         // Always looks identical to the caller whether or not the email is registered.
         userRepository.findByEmail(email.toLowerCase()).ifPresent(user -> {
             try {
-                String code = supabaseAuthService.generateRecoveryOtp(user.getEmail());
-                emailService.sendPasswordResetCode(user.getEmail(), user.getFullName(), code);
+                SupabaseAuthService.GeneratedOtp otp = supabaseAuthService.generateRecoveryOtp(user.getEmail());
+                emailService.sendPasswordResetCode(user.getEmail(), user.getFullName(), otp.code());
             } catch (Exception ex) {
+                // Swallowed on purpose: reporting this would reveal whether the address is registered.
                 log.error("Failed to send password reset code", ex);
             }
         });
@@ -79,6 +90,18 @@ public class AuthService {
         SupabaseAuthService.OtpResult otpResult =
                 supabaseAuthService.verifyRecoveryOtp(request.email().toLowerCase(), request.otp());
         supabaseAuthService.setPassword(otpResult.accessToken(), request.newPassword());
+    }
+
+    private void rollBackHalfFinishedSignup(String userId, String email) {
+        if (userId == null) {
+            log.error("Cannot roll back signup for {} — Supabase returned no user id", email);
+            return;
+        }
+        try {
+            supabaseAuthService.deleteUser(userId);
+        } catch (Exception cleanupError) {
+            log.error("Failed to roll back half-finished signup for {}", email, cleanupError);
+        }
     }
 
     private AuthResponse issueAuthResponse(String accessToken, String userId) {
