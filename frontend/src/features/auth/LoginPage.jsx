@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AlertBanner from '../../components/AlertBanner'
 import FormField from '../../components/FormField'
 import { useAuth } from '../../auth/AuthContext'
@@ -96,14 +96,9 @@ export default function LoginPage() {
               </FormField>
 
               <div className="mb-3">
-                <div className="d-flex justify-content-between align-items-baseline">
-                  <label htmlFor="password" className="form-label fw-semibold">
-                    Password
-                  </label>
-                  <Link to="/forgot-password" className="small">
-                    Forgot password?
-                  </Link>
-                </div>
+                <label htmlFor="password" className="form-label fw-semibold">
+                  Password
+                </label>
                 <input
                   id="password"
                   name="password"
@@ -121,10 +116,6 @@ export default function LoginPage() {
                 {isSubmitting ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
-
-            <p className="text-center small text-muted-app mt-4 mb-0">
-              Don&apos;t have an account? <Link to="/register">Create one</Link>
-            </p>
           </div>
         </div>
       </main>
