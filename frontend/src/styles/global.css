@@ -295,11 +295,6 @@ button {
   }
 }
 
-.demo-hint code {
-  background-color: var(--color-surface-muted);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
 
 .stat-card {
   position: relative;

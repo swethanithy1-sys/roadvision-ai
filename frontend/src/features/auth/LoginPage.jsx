@@ -125,10 +125,6 @@ export default function LoginPage() {
             <p className="text-center small text-muted-app mt-4 mb-0">
               Don&apos;t have an account? <Link to="/register">Create one</Link>
             </p>
-
-            <div className="demo-hint text-center small text-muted-app mt-4">
-              Demo: admin@roadvision.ai / citizen1@roadvision.ai — password <code>Password123!</code>
-            </div>
           </div>
         </div>
       </main>

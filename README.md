@@ -152,10 +152,7 @@ cd backend
 mvn spring-boot:run
 ```
 
-The API starts at `http://localhost:8080/api`. On first run:
-- Flyway applies `V1__init_schema.sql` automatically.
-- `DataSeeder` seeds three demo accounts (see below) since the `users` table starts empty.
-- `ReportSeeder` seeds 9 sample reports spanning all severities, statuses, and the last ~5 months (with generated placeholder photos) so the dashboard, analytics, and hazard map aren't empty on first run.
+The API starts at `http://localhost:8080/api`. On first run, Flyway applies all migrations automatically. Demo data is opt-in, not automatic — see below.
 
 Configuration lives in `backend/src/main/resources/application.yml`, all overridable via environment variables — see `backend/.env.example`.
 
@@ -169,13 +166,9 @@ npm run dev
 
 The app starts at `http://localhost:5173` and talks to the backend at `VITE_API_BASE_URL` (defaults to `http://localhost:8080/api`, see `frontend/.env.example`).
 
-### Demo accounts
+### Demo data (optional)
 
-| Role    | Email                    | Password        |
-|---------|---------------------------|------------------|
-| Admin   | admin@roadvision.ai       | Password123!     |
-| Citizen | citizen1@roadvision.ai    | Password123!     |
-| Citizen | citizen2@roadvision.ai    | Password123!     |
+`SEED_ENABLED` defaults to `false` — a fresh environment starts with no accounts and no reports, which is what a real deployment should do. Set `SEED_ENABLED=true` to have `DataSeeder` provision three demo accounts (`admin@roadvision.ai`, `citizen1@roadvision.ai`, `citizen2@roadvision.ai`, all password `Password123!`, created for real through Supabase Auth) and `ReportSeeder` add 9 sample reports spanning all severities/statuses/months, so the dashboards aren't empty. Both seeders only insert when their tables are empty, so turn `SEED_ENABLED` back off after seeding once — otherwise a manual reset (`DELETE FROM ...`) would just get reseeded on the next restart.
 
 New citizen accounts can also self-register via `/register`; the role is always `CITIZEN` on self-registration — that's enforced in the database by the `auth.users` insert trigger, not just in application code, so an admin account can only be provisioned deliberately (the seeder, or a direct role update). After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
 
@@ -244,8 +237,6 @@ The `profiles` table is a 1:1 mirror of `auth.users`, created automatically by a
 > There is no `JWT_SECRET` — this app doesn't issue its own JWTs. Supabase signs them (ES256) and the backend verifies them against Supabase's JWKS endpoint, so the only auth credentials to configure are the Supabase project URL and keys. `SUPABASE_SECRET_KEY` (`sb_secret_…`) is server-only; `SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`) is the low-privilege key used for user-facing sign-in/OTP calls.
 
 > The database must be a real Supabase Postgres project (its `auth.users` table and insert trigger are what the profile mirror depends on), connected via the **Session Pooler** — see Deployment Notes.
-
-> Set `SEED_ENABLED=false` once you've moved past demo data — `DataSeeder`/`ReportSeeder` only insert when their tables are empty, so disabling seeding after a manual reset (`DELETE FROM ...`) keeps the fake sample reports from coming back on the next restart.
 
 **Frontend** (`frontend/.env.example`): `VITE_API_BASE_URL`.
 

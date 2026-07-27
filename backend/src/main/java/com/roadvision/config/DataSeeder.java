@@ -34,7 +34,7 @@ public class DataSeeder implements CommandLineRunner {
             UserRepository userRepository,
             RestClient supabaseAuthRestClient,
             @Value("${app.supabase.secret-key}") String secretKey,
-            @Value("${app.seed.enabled:true}") boolean seedEnabled
+            @Value("${app.seed.enabled:false}") boolean seedEnabled
     ) {
         this.userRepository = userRepository;
         this.authClient = supabaseAuthRestClient;

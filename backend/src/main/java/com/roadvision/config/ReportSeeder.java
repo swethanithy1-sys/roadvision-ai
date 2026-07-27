@@ -57,7 +57,7 @@ public class ReportSeeder implements CommandLineRunner {
     private final RepairEstimator repairEstimator;
     private final JdbcTemplate jdbcTemplate;
 
-    @Value("${app.seed.enabled:true}")
+    @Value("${app.seed.enabled:false}")
     private boolean seedEnabled;
 
     private record SeedReport(
