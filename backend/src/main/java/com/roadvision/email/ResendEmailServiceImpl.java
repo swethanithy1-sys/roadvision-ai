@@ -8,7 +8,11 @@ import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
-/** Sends real email via Resend's free REST API (no SDK dependency — same RestClient pattern used elsewhere). */
+/**
+ * Sends the one-time codes via Resend's REST API. Deliberately the REST API and not SMTP:
+ * Resend's SMTP relay requires a verified sending domain, whereas the REST API works with the
+ * shared onboarding@resend.dev sender for testing.
+ */
 @Service
 @ConditionalOnProperty(name = "app.email.provider", havingValue = "resend")
 @Slf4j
@@ -29,13 +33,13 @@ public class ResendEmailServiceImpl implements EmailService {
     }
 
     @Override
-    public void sendVerificationEmail(String toEmail, String toName, String verificationLink) {
-        send(toEmail, "Verify your RoadVision AI account", EmailTemplates.verificationEmailHtml(toName, verificationLink));
+    public void sendVerificationCode(String toEmail, String toName, String code) {
+        send(toEmail, "Your RoadVision AI verification code", EmailTemplates.verificationCodeHtml(toName, code));
     }
 
     @Override
-    public void sendPasswordResetEmail(String toEmail, String toName, String resetLink) {
-        send(toEmail, "Reset your RoadVision AI password", EmailTemplates.passwordResetEmailHtml(toName, resetLink));
+    public void sendPasswordResetCode(String toEmail, String toName, String code) {
+        send(toEmail, "Your RoadVision AI password reset code", EmailTemplates.passwordResetCodeHtml(toName, code));
     }
 
     private void send(String toEmail, String subject, String html) {

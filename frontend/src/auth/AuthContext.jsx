@@ -7,42 +7,26 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser)
   const [token, setToken] = useState(getToken)
-  const [isLoading, setIsLoading] = useState(false)
 
   const login = useCallback(async (email, password) => {
-    setIsLoading(true)
-    try {
-      const data = await authApi.login(email, password)
-      saveSession(data.token, data.user)
-      setToken(data.token)
-      setUser(data.user)
-      return data.user
-    } finally {
-      setIsLoading(false)
-    }
+    const data = await authApi.login(email, password)
+    saveSession(data.token, data.user)
+    setToken(data.token)
+    setUser(data.user)
+    return data.user
   }, [])
 
   const register = useCallback(async (payload) => {
-    setIsLoading(true)
-    try {
-      // Accounts start unverified — no session yet; the user must confirm their email first.
-      return await authApi.register(payload)
-    } finally {
-      setIsLoading(false)
-    }
+    // No session yet — the account exists but is unverified until the emailed code is confirmed.
+    return authApi.register(payload)
   }, [])
 
-  const verifyEmail = useCallback(async (token) => {
-    setIsLoading(true)
-    try {
-      const data = await authApi.verifyEmail(token)
-      saveSession(data.token, data.user)
-      setToken(data.token)
-      setUser(data.user)
-      return data.user
-    } finally {
-      setIsLoading(false)
-    }
+  const completeRegistration = useCallback(async (payload) => {
+    const data = await authApi.setPassword(payload)
+    saveSession(data.token, data.user)
+    setToken(data.token)
+    setUser(data.user)
+    return data.user
   }, [])
 
   const logout = useCallback(() => {
@@ -57,13 +41,12 @@ export function AuthProvider({ children }) {
       token,
       isAuthenticated: Boolean(token),
       isAdmin: user?.role === 'ADMIN',
-      isLoading,
       login,
       register,
-      verifyEmail,
+      completeRegistration,
       logout,
     }),
-    [user, token, isLoading, login, register, verifyEmail, logout]
+    [user, token, login, register, completeRegistration, logout]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

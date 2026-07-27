@@ -37,9 +37,9 @@ public class SupabaseStorageServiceImpl implements FileStorageService {
 
     public SupabaseStorageServiceImpl(
             RestClient supabaseRestClient,
-            @Value("${app.storage.supabase.secret-key}") String secretKey,
+            @Value("${app.supabase.secret-key}") String secretKey,
             @Value("${app.storage.supabase.bucket}") String bucket,
-            @Value("${app.storage.supabase.project-url}") String projectUrl
+            @Value("${app.supabase.project-url}") String projectUrl
     ) {
         this.supabaseRestClient = supabaseRestClient;
         this.secretKey = secretKey;

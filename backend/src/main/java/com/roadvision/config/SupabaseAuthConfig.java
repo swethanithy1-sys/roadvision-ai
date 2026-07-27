@@ -6,13 +6,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-public class StorageConfig {
+public class SupabaseAuthConfig {
 
     @Bean
-    public RestClient supabaseRestClient(
-            @Value("${app.supabase.project-url}") String projectUrl,
-            @Value("${app.storage.supabase.timeout-ms}") long timeoutMs
+    public RestClient supabaseAuthRestClient(
+            @Value("${app.supabase.project-url}") String projectUrl
     ) {
-        return RestClientFactory.buildClient(projectUrl + "/storage/v1", timeoutMs);
+        return RestClientFactory.buildClient(projectUrl + "/auth/v1", 15000);
     }
 }

@@ -13,8 +13,14 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * A lightweight profile keyed 1:1 to a Supabase Auth user ({@code auth.users.id}) — created
+ * automatically by a Postgres trigger (see V3__supabase_auth.sql) whenever Supabase Auth
+ * creates a user. Supabase owns the password/session/verification lifecycle; this entity only
+ * holds app-specific data (role, display fields).
+ */
 @Entity
-@Table(name = "users")
+@Table(name = "profiles")
 @EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
@@ -22,7 +28,6 @@ import java.util.UUID;
 public class User {
 
     @Id
-    @GeneratedValue
     private UUID id;
 
     @Column(name = "full_name", nullable = false, length = 150)
@@ -30,9 +35,6 @@ public class User {
 
     @Column(nullable = false, unique = true)
     private String email;
-
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
 
     private String phone;
 
@@ -43,9 +45,6 @@ public class User {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    @Column(name = "email_verified", nullable = false)
-    private boolean emailVerified = false;
-
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -53,13 +52,4 @@ public class User {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    public User(String fullName, String email, String passwordHash, String phone, Role role) {
-        this.fullName = fullName;
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.phone = phone;
-        this.role = role;
-        this.active = true;
-    }
 }

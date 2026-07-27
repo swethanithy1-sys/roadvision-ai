@@ -1,38 +1,36 @@
 package com.roadvision.email;
 
-/** Branded HTML for transactional auth emails, styled to match the app's theme tokens. */
+/** Branded HTML for the one-time-code emails, styled to match the app's theme tokens. */
 final class EmailTemplates {
 
     private EmailTemplates() {
     }
 
-    static String verificationEmailHtml(String name, String verificationLink) {
+    static String verificationCodeHtml(String name, String code) {
         return layout(
                 "Verify your email",
                 "Hi " + escape(name) + ",",
-                "Thanks for signing up for RoadVision AI. Confirm your email address to activate "
-                        + "your account and start reporting road damage.",
-                "Verify email",
-                verificationLink,
-                "This link expires in 24 hours. If you didn't create this account, you can safely "
+                "Thanks for signing up for RoadVision AI. Enter this code in the app to confirm "
+                        + "your email address and activate your account.",
+                code,
+                "This code expires shortly. If you didn't create this account, you can safely "
                         + "ignore this email."
         );
     }
 
-    static String passwordResetEmailHtml(String name, String resetLink) {
+    static String passwordResetCodeHtml(String name, String code) {
         return layout(
                 "Reset your password",
                 "Hi " + escape(name) + ",",
-                "We received a request to reset your RoadVision AI password. Click the button "
-                        + "below to choose a new one.",
-                "Reset password",
-                resetLink,
-                "This link expires in 1 hour. If you didn't request this, you can safely ignore "
+                "We received a request to reset your RoadVision AI password. Enter this code in "
+                        + "the app to choose a new one.",
+                code,
+                "This code expires shortly. If you didn't request this, you can safely ignore "
                         + "this email — your password won't change."
         );
     }
 
-    private static String layout(String title, String greeting, String body, String buttonText, String buttonLink, String footnote) {
+    private static String layout(String title, String greeting, String body, String code, String footnote) {
         return """
                 <!DOCTYPE html>
                 <html>
@@ -51,10 +49,10 @@ final class EmailTemplates {
                               <h1 style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">%s</h1>
                               <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">%s</p>
                               <p style="margin:0 0 28px;color:#334155;font-size:15px;line-height:1.6;">%s</p>
-                              <table role="presentation" cellpadding="0" cellspacing="0">
+                              <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%%;">
                                 <tr>
-                                  <td style="border-radius:8px;background-color:#2563EB;">
-                                    <a href="%s" style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">%s</a>
+                                  <td align="center" style="background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:20px;">
+                                    <span style="font-size:32px;font-weight:700;letter-spacing:0.3em;color:#2563EB;">%s</span>
                                   </td>
                                 </tr>
                               </table>
@@ -72,7 +70,7 @@ final class EmailTemplates {
                   </table>
                 </body>
                 </html>
-                """.formatted(title, greeting, body, buttonLink, buttonText, footnote);
+                """.formatted(title, greeting, body, code, footnote);
     }
 
     private static String escape(String value) {

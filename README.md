@@ -8,14 +8,16 @@ AI-powered Smart Road Infrastructure Monitoring and Maintenance Management Syste
 
 ```
 Browser (React 18 + Vite)
-        │  REST (JSON) + JWT bearer token
+        │  REST (JSON) + JWT bearer token (issued by Supabase Auth)
         ▼
-Spring Boot 3 API  ──────────────►  PostgreSQL 16
+Spring Boot 3 API  ──────────────►  Supabase Postgres
+        │                            (auth.users + app tables)
+        └──► Supabase Auth · Supabase Storage · Resend · Roboflow · Gemini
   Controller → Service → Repository → Entity
   │
-  ├── security/    JWT issuance & validation, Spring Security filter chain
-  ├── auth/        register / login
-  ├── user/        user profile
+  ├── security/    Supabase JWT verification (JWKS), role resolution, Spring Security filter chain
+  ├── auth/        register / verify-otp / set-password / login / forgot+reset password (proxies Supabase Auth)
+  ├── user/        user profile (mirrors auth.users)
   ├── detection/    AIDetectionService interface → Mock (default), Roboflow-hosted, or self-hosted ai-service/ impl
   ├── storage/      FileStorageService interface → LocalFileStorageServiceImpl (default) or SupabaseStorageServiceImpl
   ├── email/        EmailService interface → LogEmailServiceImpl (default) or ResendEmailServiceImpl
@@ -109,7 +111,7 @@ Computed by `AnalyticsService` (not a stored value) as `100 − average severity
 | Database   | PostgreSQL 16                                                     |
 | Maps       | Leaflet + react-leaflet + OpenStreetMap tiles                      |
 | Charts     | Recharts 3                                                         |
-| Auth       | JWT (stateless), BCrypt password hashing, role-based authorization |
+| Auth       | Supabase Auth (proxied server-side), ES256 JWTs verified via JWKS, role-based authorization |
 | AI service (optional) | Roboflow hosted inference API (free tier), or self-hosted Python 3.11 + FastAPI + Ultralytics YOLOv8 on Hugging Face Spaces (free) |
 | Cost estimation (optional) | Google's free Gemini API (`gemini-3.5-flash-lite`), with automatic fallback to a rule-based formula |
 | Geocoding  | OpenStreetMap Nominatim (free, reverse geocoding for GPS-based reports)          |
@@ -175,42 +177,48 @@ The app starts at `http://localhost:5173` and talks to the backend at `VITE_API_
 | Citizen | citizen1@roadvision.ai    | Password123!     |
 | Citizen | citizen2@roadvision.ai    | Password123!     |
 
-New citizen accounts can also self-register via `/register`; the API always assigns the `CITIZEN` role on self-registration (admin accounts are provisioned via the seeder only, by design). New accounts start unverified and must confirm their email before their first login — see "Email Verification & Password Reset" below. After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
+New citizen accounts can also self-register via `/register`; the role is always `CITIZEN` on self-registration — that's enforced in the database by the `auth.users` insert trigger, not just in application code, so an admin account can only be provisioned deliberately (the seeder, or a direct role update). After login, citizens land on `/dashboard`; admins land on `/admin` — both the frontend router (`RoleRoute`) and every admin endpoint (`@PreAuthorize("hasRole('ADMIN')")`) enforce this independently.
 
-### Email Verification & Password Reset
+### Authentication (Supabase Auth + Resend)
 
-Registration no longer logs the user straight in. Instead:
+Passwords, sessions, and email confirmation are owned by **Supabase Auth** — this app never stores or hashes a password. Two deliberate choices shape the design:
 
-1. `POST /auth/register` creates the account (`email_verified = false`), issues a single-use, 24-hour `EMAIL_VERIFICATION` token, and emails a verification link (`{FRONTEND_URL}/verify-email?token=...`). The response has no JWT — the frontend shows a "check your email" screen.
-2. `POST /auth/login` rejects unverified accounts with `403` before checking anything else about the session; the frontend surfaces a "Resend verification email" action backed by `POST /auth/resend-verification`.
-3. Clicking the email link hits `POST /auth/verify-email` with the token, which marks the account verified, consumes the token, and — as a convenience — returns a JWT so the user lands straight in the app instead of having to log in again.
-4. "Forgot password" (`POST /auth/forgot-password`) issues a single-use, 1-hour `PASSWORD_RESET` token and emails a reset link (`{FRONTEND_URL}/reset-password?token=...`). Both this and resend-verification always return the same generic success message regardless of whether the email exists, to avoid leaking which addresses are registered.
-5. `POST /auth/reset-password` consumes the token and updates the password hash; the user then logs in normally with the new password.
+**1. Supabase is proxied through this backend, not called from the browser.** The React app only ever talks to our own `/auth/*` endpoints; `SupabaseAuthService` calls Supabase's REST API server-side. This keeps a single API surface for the frontend and keeps Supabase credentials out of the browser bundle.
 
-Tokens live in a dedicated `auth_tokens` table (`type` = `EMAIL_VERIFICATION` or `PASSWORD_RESET`, single-use via `used_at`, time-boxed via `expires_at`) rather than reusing the `users` table, so a token's lifecycle is independent of the account itself.
+**2. Verification is a one-time code, and *this app* emails it — not Supabase.** `POST /auth/register` mints the code through Supabase's Admin `generate_link` endpoint, which returns the plaintext `email_otp` **without sending anything**, and hands it to our own `EmailService` to deliver. Supabase's built-in mailer is bypassed on purpose: its email templates are only editable once custom SMTP is configured, and its default templates send a confirmation *link* rather than the code this UI asks the user to type. Doing it this way keeps the email template in version-controlled code and works on a free Supabase project with no dashboard configuration at all.
 
-Sending is behind its own pluggable `EmailService` (`app.email.provider`, same `@ConditionalOnProperty` pattern as everywhere else):
+Registration is three steps, so the user only picks a password once their address is proven:
 
-- **Log (default, `EMAIL_PROVIDER=log` or unset)** — `LogEmailServiceImpl` just logs the verification/reset link instead of sending real email. Zero setup, and how the flow above was verified end-to-end locally.
-- **Resend (optional, `EMAIL_PROVIDER=resend`)** — `ResendEmailServiceImpl` sends real, on-brand HTML email via [Resend](https://resend.com)'s free REST API (100 emails/day, no card required). Switch to it with:
+1. `POST /auth/register` — name/email/phone. Creates the unconfirmed account (with a throwaway random password) and emails an 8-digit code. No JWT is returned.
+2. `POST /auth/verify-otp` — email + code. Returns a short-lived Supabase access token; the account still has no usable password.
+3. `POST /auth/set-password` — that token + the chosen password. Completes the account and returns a JWT, so the user lands straight in the app.
+
+"Forgot password" mirrors it: `POST /auth/forgot-password` mints a `recovery` code the same way, and `POST /auth/reset-password` verifies the code and sets the new password. It returns an identical generic message whether or not the email is registered, so it can't be used to discover which addresses have accounts.
+
+Delivery sits behind a pluggable `EmailService` (`app.email.provider`, same `@ConditionalOnProperty` pattern as everywhere else):
+
+- **Log (default, `EMAIL_PROVIDER=log` or unset)** — `LogEmailServiceImpl` prints the code to the console. Zero setup for local development.
+- **Resend (optional, `EMAIL_PROVIDER=resend`)** — `ResendEmailServiceImpl` sends branded HTML email via [Resend](https://resend.com)'s free REST API (100/day, no card required):
 
 ```bash
 EMAIL_PROVIDER=resend
 RESEND_API_KEY=<your free key from resend.com/api-keys>
 ```
 
-`RESEND_FROM_EMAIL` defaults to Resend's shared `onboarding@resend.dev` sender, which needs no domain verification but is documented by Resend as testing-only and reliably delivers only to your own Resend account email — verify a domain you own in the Resend dashboard and point `RESEND_FROM_EMAIL` at it (e.g. `RoadVision AI <noreply@yourdomain.com>`) before relying on this for real users. Sending failures never block registration or password reset — they're logged and the user can always request a resend.
+> Resend's **REST API** is used rather than its SMTP relay: SMTP requires a verified sending domain, while the REST API works immediately with the shared `onboarding@resend.dev` sender. That shared sender only reliably delivers to your own Resend account address, so verify a domain you own and point `RESEND_FROM_EMAIL` at it (e.g. `RoadVision AI <noreply@yourdomain.com>`) before real users sign up.
+
+The `profiles` table is a 1:1 mirror of `auth.users`, created automatically by a Postgres trigger on insert and tied to it by a foreign key with `ON DELETE CASCADE` — deleting a Supabase Auth user cleans up its profile (and that user's reports) rather than orphaning them.
 
 ## API Reference
 
 | Method | Endpoint                    | Auth        | Description                                    |
 |--------|-------------------------------|-------------|--------------------------------------------------|
-| POST   | `/api/auth/register`         | Public      | Create an unverified citizen account; sends a verification email |
-| POST   | `/api/auth/login`            | Public      | Authenticate, returns JWT (403 if email unverified) |
-| POST   | `/api/auth/verify-email`     | Public      | Confirm email via token, returns JWT (auto-login) |
-| POST   | `/api/auth/resend-verification` | Public   | Re-send the verification email                    |
-| POST   | `/api/auth/forgot-password`  | Public      | Send a password reset email                        |
-| POST   | `/api/auth/reset-password`   | Public      | Reset password via token                           |
+| POST   | `/api/auth/register`         | Public      | Step 1 — create the unconfirmed account, email an 8-digit code |
+| POST   | `/api/auth/verify-otp`       | Public      | Step 2 — verify the code, returns a short-lived access token |
+| POST   | `/api/auth/set-password`     | Public      | Step 3 — set the password with that token, returns JWT |
+| POST   | `/api/auth/login`            | Public      | Authenticate, returns JWT (401 on bad credentials) |
+| POST   | `/api/auth/forgot-password`  | Public      | Email a password reset code                        |
+| POST   | `/api/auth/reset-password`   | Public      | Verify the reset code and set a new password       |
 | GET    | `/api/users/me`              | Bearer JWT  | Current authenticated user profile                |
 | GET    | `/api/users/admin/ping`      | Bearer JWT (ADMIN) | Role-guard smoke test                      |
 | POST   | `/api/reports`               | Bearer JWT  | Submit a report (multipart: `image` + `report` JSON part); runs mock AI detection synchronously |
@@ -231,9 +239,11 @@ RESEND_API_KEY=<your free key from resend.com/api-keys>
 
 ## Environment Variables
 
-**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`, `SEED_ENABLED`, `LOG_LEVEL`, `STORAGE_PROVIDER`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SUPABASE_PROJECT_URL`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_SECRET_KEY`, `SUPABASE_TIMEOUT_MS`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMAIL_PROVIDER`, `RESEND_BASE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_TIMEOUT_MS`.
+**Backend** (`backend/.env.example`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`, `CORS_ALLOWED_ORIGINS`, `SEED_ENABLED`, `LOG_LEVEL`, `SUPABASE_PROJECT_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `STORAGE_PROVIDER`, `UPLOAD_DIR`, `UPLOAD_PUBLIC_PATH`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_TIMEOUT_MS`, `AI_PROVIDER`, `AI_SERVICE_URL`, `AI_SERVICE_TIMEOUT_MS`, `ROBOFLOW_BASE_URL`, `ROBOFLOW_API_KEY`, `ROBOFLOW_MODEL_ID`, `ROBOFLOW_CONFIDENCE_THRESHOLD`, `COST_PROVIDER`, `GEMINI_BASE_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMAIL_PROVIDER`, `RESEND_BASE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_TIMEOUT_MS`.
 
-> `FRONTEND_URL` is used server-side to build the links inside verification/reset emails (`{FRONTEND_URL}/verify-email?token=...`) — set it to your deployed frontend's URL, not just for CORS.
+> There is no `JWT_SECRET` — this app doesn't issue its own JWTs. Supabase signs them (ES256) and the backend verifies them against Supabase's JWKS endpoint, so the only auth credentials to configure are the Supabase project URL and keys. `SUPABASE_SECRET_KEY` (`sb_secret_…`) is server-only; `SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`) is the low-privilege key used for user-facing sign-in/OTP calls.
+
+> The database must be a real Supabase Postgres project (its `auth.users` table and insert trigger are what the profile mirror depends on), connected via the **Session Pooler** — see Deployment Notes.
 
 > Set `SEED_ENABLED=false` once you've moved past demo data — `DataSeeder`/`ReportSeeder` only insert when their tables are empty, so disabling seeding after a manual reset (`DELETE FROM ...`) keeps the fake sample reports from coming back on the next restart.
 
@@ -241,21 +251,19 @@ RESEND_API_KEY=<your free key from resend.com/api-keys>
 
 **AI service** (`ai-service/README.md`): `MODEL_PATH`, `CONFIDENCE_THRESHOLD`.
 
-> `JWT_SECRET` ships with a development-only default — set a strong secret via environment variable before any real deployment.
-
 ## Deployment Notes
 
-The app's own JWT auth is provider-agnostic, and both file storage and email are behind pluggable abstractions (see above), so:
+Authentication is delegated to Supabase, and file storage, email, AI detection, and cost estimation are all behind pluggable abstractions (see above), so:
 
-- **Database (Supabase, or any managed Postgres)** — Supabase's Postgres is just Postgres; point `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at its connection details and Flyway migrates it on first boot exactly like local Postgres. **Use the Session Pooler connection** (Project Settings → Database → "Session pooler" tab — host like `aws-0-<region>.pooler.supabase.com`, port `5432`, user `postgres.<project-ref>`), not the Direct connection: Supabase's direct connection requires IPv6, which many hosts (including Render) don't reliably support outbound, so it can work fine locally and then fail to connect once deployed. Verified end-to-end against a live Supabase project: both migrations apply cleanly to a fresh database, and the app runs fully against it (seeding, auth, report submission with Supabase Storage) with zero code changes beyond env vars. (This app doesn't use Supabase's own Auth product — it has its own JWT auth.)
-- **File storage & email** — `STORAGE_PROVIDER=supabase` + `EMAIL_PROVIDER=resend` for a fully-managed deployment with no local disk dependency; see the "Report Photo Storage" and "Email Verification & Password Reset" sections above for the exact env vars.
-- **Backend (Render)** — deploy `backend/` as a Docker or Maven web service; set the env vars above (`DB_*` from the Supabase session pooler, `JWT_SECRET` — generate a real one, don't ship the dev default, `CORS_ALLOWED_ORIGINS`/`FRONTEND_URL` to your Vercel domain, `STORAGE_PROVIDER=supabase` since Render's free tier has no persistent disk, `AI_PROVIDER=roboflow` + `COST_PROVIDER=gemini` for real AI, `EMAIL_PROVIDER=resend` for real email).
+- **Database + Auth (Supabase)** — point `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at the project's connection details and Flyway migrates it on first boot. **Use the Session Pooler connection** (Project Settings → Database → "Session pooler" tab — host like `aws-0-<region>.pooler.supabase.com`, port `5432`, user `postgres.<project-ref>`), not the Direct connection: Supabase's direct connection requires IPv6, which many hosts (including Render) don't reliably support outbound, so it can work fine locally and then fail to connect once deployed. A real Supabase project is required rather than any managed Postgres, since `auth.users` and the profile trigger live there. Verified end-to-end against a live project: all four migrations apply cleanly to a fresh database, and registration → OTP email → verification → set password → login → password reset all work against it with zero code changes beyond env vars.
+- **File storage & email** — `STORAGE_PROVIDER=supabase` + `EMAIL_PROVIDER=resend` for a fully-managed deployment with no local disk dependency; see the "Report Photo Storage" and "Authentication" sections above for the exact env vars.
+- **Backend (Render)** — deploy `backend/` as a Docker or Maven web service; set the env vars above (`DB_*` from the Supabase session pooler, `SUPABASE_PROJECT_URL`/`SUPABASE_SECRET_KEY`/`SUPABASE_PUBLISHABLE_KEY`, `CORS_ALLOWED_ORIGINS` to your Vercel domain, `STORAGE_PROVIDER=supabase` since Render's free tier has no persistent disk, `AI_PROVIDER=roboflow` + `COST_PROVIDER=gemini` for real AI, `EMAIL_PROVIDER=resend` for real email).
 - **Frontend (Vercel)** — deploy `frontend/`; set `VITE_API_BASE_URL` to your Render backend's public URL + `/api`.
 - **AI service (Hugging Face Spaces)** — only needed if using `AI_PROVIDER=real` instead of the simpler `AI_PROVIDER=roboflow`; see `ai-service/README.md`; set the backend's `AI_SERVICE_URL` to the Space's URL.
 
 ## Roadmap
 
-1. **Phase 1 (done)** — Monorepo scaffold, PostgreSQL schema, JWT auth, role-based authorization, app shell, theme system (light/dark).
+1. **Phase 1 (done)** — Monorepo scaffold, PostgreSQL schema, authentication, role-based authorization, app shell, theme system (light/dark). *(Auth was later migrated to Supabase Auth — see [Authentication](#authentication-supabase-auth--resend).)*
 2. **Phase 2 (done)** — Report submission (image upload/capture + GPS/manual location), mock AI detection (deterministic, per-image), automatic repair priority/cost estimation, My Reports, Report Details with bounding-box overlay and status timeline.
 3. **Phase 3 (done)** — Live citizen dashboard (stats, road safety score, recent activity), Analytics dashboard (severity breakdown, monthly trend, resolution rate, avg. confidence, top affected areas — Recharts), Hazard Map (Leaflet/OSM, severity-colored markers, popup details).
 4. **Phase 4 (done)** — Admin Dashboard (fleet-wide stats + recent reports), Repair Management (list/filter all reports, assign priority, update status), printable Work Order generation (materials, labor, duration, signature lines).

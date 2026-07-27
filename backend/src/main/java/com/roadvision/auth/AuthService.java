@@ -1,26 +1,17 @@
 package com.roadvision.auth;
 
-import com.roadvision.common.constants.Role;
-import com.roadvision.common.exception.BadRequestException;
 import com.roadvision.common.exception.DuplicateResourceException;
-import com.roadvision.common.exception.EmailNotVerifiedException;
+import com.roadvision.common.exception.ResourceNotFoundException;
 import com.roadvision.email.EmailService;
-import com.roadvision.security.JwtService;
-import com.roadvision.security.UserPrincipal;
 import com.roadvision.user.User;
 import com.roadvision.user.UserMapper;
 import com.roadvision.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -28,118 +19,71 @@ import java.util.UUID;
 @Slf4j
 public class AuthService {
 
-    private static final Duration VERIFICATION_TOKEN_TTL = Duration.ofHours(24);
-    private static final Duration RESET_TOKEN_TTL = Duration.ofHours(1);
-
-    private final UserRepository userRepository;
-    private final AuthTokenRepository authTokenRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
-    private final UserMapper userMapper;
+    private final SupabaseAuthService supabaseAuthService;
     private final EmailService emailService;
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
+    private final JwtDecoder jwtDecoder;
 
-    @Value("${app.frontend-url}")
-    private String frontendUrl;
-
-    @Transactional
+    /** Step 1 of registration: create the unconfirmed account and email its verification code. */
     public RegisterResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new DuplicateResourceException("An account with this email already exists");
+        String email = request.email().toLowerCase();
+
+        if (userRepository.existsByEmail(email)) {
+            throw new DuplicateResourceException(
+                    "An account with this email already exists. Try logging in or resetting your password."
+            );
         }
 
-        // Registration is always CITIZEN; admin accounts are provisioned separately (seed data / future admin console).
-        User user = new User(
-                request.fullName(),
-                request.email().toLowerCase(),
-                passwordEncoder.encode(request.password()),
-                request.phone(),
-                Role.CITIZEN
-        );
-        user = userRepository.save(user);
+        String code = supabaseAuthService.generateSignupOtp(email, request.fullName(), request.phone());
+        emailService.sendVerificationCode(email, request.fullName(), code);
 
-        issueAndSendVerificationEmail(user);
+        return new RegisterResponse(request.email());
+    }
 
-        return new RegisterResponse(user.getEmail());
+    /** Step 2 of registration: verify the emailed code (no password yet). */
+    public VerifyOtpResponse verifyOtp(VerifyOtpRequest request) {
+        SupabaseAuthService.OtpResult otpResult =
+                supabaseAuthService.verifySignupOtp(request.email().toLowerCase(), request.otp());
+        return new VerifyOtpResponse(otpResult.accessToken());
+    }
+
+    /** Step 3 of registration: set the password using the token from {@link #verifyOtp}, completing the account. */
+    @Transactional
+    public AuthResponse setPassword(SetPasswordRequest request) {
+        supabaseAuthService.setPassword(request.accessToken(), request.password());
+        String userId = jwtDecoder.decode(request.accessToken()).getSubject();
+        return issueAuthResponse(request.accessToken(), userId);
     }
 
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email().toLowerCase(), request.password())
-        );
+        SupabaseAuthService.SignInResult signInResult =
+                supabaseAuthService.signIn(request.email().toLowerCase(), request.password());
 
-        User user = userRepository.findByEmail(request.email().toLowerCase())
-                .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
-
-        if (!user.isEmailVerified()) {
-            throw new EmailNotVerifiedException("Please verify your email before logging in");
-        }
-
-        return issueAuthResponse(user);
+        return issueAuthResponse(signInResult.accessToken(), signInResult.userId());
     }
 
-    @Transactional
-    public AuthResponse verifyEmail(String token) {
-        AuthToken authToken = authTokenRepository.findByTokenAndType(token, TokenType.EMAIL_VERIFICATION)
-                .filter(AuthToken::isValid)
-                .orElseThrow(() -> new BadRequestException("This verification link is invalid or has expired"));
-
-        User user = authToken.getUser();
-        user.setEmailVerified(true);
-        authToken.setUsedAt(Instant.now());
-
-        return issueAuthResponse(user);
-    }
-
-    @Transactional
-    public void resendVerification(String email) {
-        // Always succeeds from the caller's perspective — doesn't reveal whether the account exists.
-        userRepository.findByEmail(email.toLowerCase())
-                .filter(user -> !user.isEmailVerified())
-                .ifPresent(this::issueAndSendVerificationEmail);
-    }
-
-    @Transactional
     public void forgotPassword(String email) {
-        // Always succeeds from the caller's perspective — doesn't reveal whether the account exists.
+        // Always looks identical to the caller whether or not the email is registered.
         userRepository.findByEmail(email.toLowerCase()).ifPresent(user -> {
-            String token = UUID.randomUUID().toString();
-            authTokenRepository.save(new AuthToken(user, token, TokenType.PASSWORD_RESET, Instant.now().plus(RESET_TOKEN_TTL)));
-            String resetLink = frontendUrl + "/reset-password?token=" + token;
-            trySendEmail(() -> emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), resetLink));
+            try {
+                String code = supabaseAuthService.generateRecoveryOtp(user.getEmail());
+                emailService.sendPasswordResetCode(user.getEmail(), user.getFullName(), code);
+            } catch (Exception ex) {
+                log.error("Failed to send password reset code", ex);
+            }
         });
     }
 
-    @Transactional
-    public void resetPassword(String token, String newPassword) {
-        AuthToken authToken = authTokenRepository.findByTokenAndType(token, TokenType.PASSWORD_RESET)
-                .filter(AuthToken::isValid)
-                .orElseThrow(() -> new BadRequestException("This password reset link is invalid or has expired"));
-
-        User user = authToken.getUser();
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        authToken.setUsedAt(Instant.now());
+    public void resetPassword(ResetPasswordRequest request) {
+        SupabaseAuthService.OtpResult otpResult =
+                supabaseAuthService.verifyRecoveryOtp(request.email().toLowerCase(), request.otp());
+        supabaseAuthService.setPassword(otpResult.accessToken(), request.newPassword());
     }
 
-    private void issueAndSendVerificationEmail(User user) {
-        String token = UUID.randomUUID().toString();
-        authTokenRepository.save(new AuthToken(user, token, TokenType.EMAIL_VERIFICATION, Instant.now().plus(VERIFICATION_TOKEN_TTL)));
-        String verificationLink = frontendUrl + "/verify-email?token=" + token;
-        trySendEmail(() -> emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), verificationLink));
-    }
-
-    /** An email provider hiccup should never break registration/reset — the user can always request a resend. */
-    private void trySendEmail(Runnable action) {
-        try {
-            action.run();
-        } catch (Exception ex) {
-            log.error("Failed to send auth email", ex);
-        }
-    }
-
-    private AuthResponse issueAuthResponse(User user) {
-        UserPrincipal principal = new UserPrincipal(user);
-        String token = jwtService.generateToken(principal);
-        return new AuthResponse(token, userMapper.toResponse(user));
+    private AuthResponse issueAuthResponse(String accessToken, String userId) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+        return new AuthResponse(accessToken, userMapper.toResponse(user));
     }
 }

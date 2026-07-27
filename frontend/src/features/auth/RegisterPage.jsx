@@ -1,36 +1,68 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AlertBanner from '../../components/AlertBanner'
 import FormField from '../../components/FormField'
 import { useAuth } from '../../auth/AuthContext'
+import { verifyOtp } from '../../api/authApi'
 
-const INITIAL_FORM = { fullName: '', email: '', phone: '', password: '' }
+const INITIAL_DETAILS = { fullName: '', email: '', phone: '' }
 
 export default function RegisterPage() {
-  const { register, isLoading } = useAuth()
+  const { register, completeRegistration } = useAuth()
+  const navigate = useNavigate()
 
-  const [form, setForm] = useState(INITIAL_FORM)
+  const [step, setStep] = useState('details') // details | otp | password
+  const [details, setDetails] = useState(INITIAL_DETAILS)
+  const [otp, setOtp] = useState('')
+  const [accessToken, setAccessToken] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [fieldErrors, setFieldErrors] = useState({})
-  const [submittedEmail, setSubmittedEmail] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleChange(e) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+  function handleDetailsChange(e) {
+    setDetails((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  async function handleSubmit(e) {
+  async function handleSendCode(e) {
     e.preventDefault()
     setError('')
-    setFieldErrors({})
+    setIsSubmitting(true)
     try {
-      const result = await register(form)
-      setSubmittedEmail(result.email)
+      await register(details)
+      setStep('otp')
     } catch (err) {
-      const data = err.response?.data
-      if (data?.data && typeof data.data === 'object') {
-        setFieldErrors(data.data)
-      }
       setError(err.friendlyMessage || 'Unable to create your account.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleVerifyOtp(e) {
+    e.preventDefault()
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const result = await verifyOtp({ email: details.email, otp })
+      setAccessToken(result.accessToken)
+      setStep('password')
+    } catch (err) {
+      setError(err.friendlyMessage || 'Invalid or expired code.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleSetPassword(e) {
+    e.preventDefault()
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const user = await completeRegistration({ accessToken, password })
+      navigate(user.role === 'ADMIN' ? '/admin' : '/dashboard', { replace: true })
+    } catch (err) {
+      setError(err.friendlyMessage || 'Unable to set your password.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -66,48 +98,36 @@ export default function RegisterPage() {
       <main className="auth-panel">
         <div className="auth-card">
           <div className="card p-4 p-md-5">
-            {submittedEmail ? (
-              <div className="text-center">
-                <div className="auth-logo mx-auto mb-3 d-lg-none">RV</div>
-                <h1 className="h4 fw-bold mb-2">Check your email</h1>
-                <p className="text-muted-app small mb-0">
-                  We sent a verification link to <strong>{submittedEmail}</strong>. Click it to
-                  activate your account, then sign in.
-                </p>
-                <p className="text-center small text-muted-app mt-4 mb-0">
-                  Already verified? <Link to="/login">Sign in</Link>
-                </p>
-              </div>
-            ) : (
+            {step === 'details' && (
               <>
                 <div className="text-center mb-4">
                   <div className="auth-logo mx-auto mb-3 d-lg-none">RV</div>
                   <h1 className="h4 fw-bold mb-1">Create your account</h1>
-                  <p className="text-muted-app small mb-0">Report road damage and track repairs</p>
+                  <p className="text-muted-app small mb-0">Start managing road reports in minutes</p>
                 </div>
 
                 <AlertBanner>{error}</AlertBanner>
 
-                <form onSubmit={handleSubmit} noValidate>
-                  <FormField label="Full name" htmlFor="fullName" error={fieldErrors.fullName}>
+                <form onSubmit={handleSendCode} noValidate>
+                  <FormField label="Full name" htmlFor="fullName">
                     <input
                       id="fullName"
                       name="fullName"
                       className="form-control"
-                      value={form.fullName}
-                      onChange={handleChange}
+                      value={details.fullName}
+                      onChange={handleDetailsChange}
                       required
                     />
                   </FormField>
 
-                  <FormField label="Email address" htmlFor="email" error={fieldErrors.email}>
+                  <FormField label="Email address" htmlFor="email">
                     <input
                       id="email"
                       name="email"
                       type="email"
                       className="form-control"
-                      value={form.email}
-                      onChange={handleChange}
+                      value={details.email}
+                      onChange={handleDetailsChange}
                       required
                       autoComplete="email"
                     />
@@ -118,34 +138,94 @@ export default function RegisterPage() {
                       id="phone"
                       name="phone"
                       className="form-control"
-                      value={form.phone}
-                      onChange={handleChange}
+                      value={details.phone}
+                      onChange={handleDetailsChange}
                       autoComplete="tel"
                     />
                   </FormField>
 
-                  <FormField label="Password" htmlFor="password" error={fieldErrors.password}>
-                    <input
-                      id="password"
-                      name="password"
-                      type="password"
-                      className="form-control"
-                      value={form.password}
-                      onChange={handleChange}
-                      required
-                      minLength={8}
-                      autoComplete="new-password"
-                    />
-                  </FormField>
-
-                  <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isLoading}>
-                    {isLoading ? 'Creating account…' : 'Create account'}
+                  <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isSubmitting}>
+                    {isSubmitting ? 'Sending code…' : 'Send verification code'}
                   </button>
                 </form>
 
                 <p className="text-center small text-muted-app mt-4 mb-0">
                   Already have an account? <Link to="/login">Sign in</Link>
                 </p>
+              </>
+            )}
+
+            {step === 'otp' && (
+              <>
+                <div className="text-center mb-4">
+                  <div className="auth-logo mx-auto mb-3 d-lg-none">RV</div>
+                  <h1 className="h4 fw-bold mb-1">Verify your email</h1>
+                  <p className="text-muted-app small mb-0">
+                    Enter the code we sent to <strong>{details.email}</strong>
+                  </p>
+                </div>
+
+                <AlertBanner>{error}</AlertBanner>
+
+                <form onSubmit={handleVerifyOtp} noValidate>
+                  <FormField label="Verification code" htmlFor="otp">
+                    <input
+                      id="otp"
+                      name="otp"
+                      className="form-control text-center"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      required
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      autoFocus
+                    />
+                  </FormField>
+
+                  <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isSubmitting}>
+                    {isSubmitting ? 'Verifying…' : 'Verify'}
+                  </button>
+                </form>
+
+                <p className="text-center small text-muted-app mt-4 mb-0">
+                  Wrong email?{' '}
+                  <button type="button" className="btn btn-link btn-sm p-0" onClick={() => setStep('details')}>
+                    Start over
+                  </button>
+                </p>
+              </>
+            )}
+
+            {step === 'password' && (
+              <>
+                <div className="text-center mb-4">
+                  <div className="auth-logo mx-auto mb-3 d-lg-none">RV</div>
+                  <h1 className="h4 fw-bold mb-1">Set your password</h1>
+                  <p className="text-muted-app small mb-0">Email verified — last step</p>
+                </div>
+
+                <AlertBanner>{error}</AlertBanner>
+
+                <form onSubmit={handleSetPassword} noValidate>
+                  <FormField label="Password" htmlFor="password">
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      className="form-control"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      autoFocus
+                    />
+                  </FormField>
+
+                  <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating account…' : 'Create account'}
+                  </button>
+                </form>
               </>
             )}
           </div>

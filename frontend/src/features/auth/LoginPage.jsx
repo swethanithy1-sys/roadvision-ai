@@ -3,46 +3,34 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AlertBanner from '../../components/AlertBanner'
 import FormField from '../../components/FormField'
 import { useAuth } from '../../auth/AuthContext'
-import { resendVerification } from '../../api/authApi'
 
 export default function LoginPage() {
-  const { login, isLoading } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
-  const [needsVerification, setNeedsVerification] = useState(false)
-  const [resendState, setResendState] = useState('idle') // idle | sending | sent
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const from = location.state?.from?.pathname
   const resetSuccess = location.state?.resetSuccess
 
   function handleChange(e) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
-    setNeedsVerification(false)
-    setResendState('idle')
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setNeedsVerification(false)
+    setIsSubmitting(true)
     try {
       const loggedInUser = await login(form.email, form.password)
       navigate(from || (loggedInUser.role === 'ADMIN' ? '/admin' : '/dashboard'), { replace: true })
     } catch (err) {
       setError(err.friendlyMessage || 'Unable to log in. Please check your credentials.')
-      setNeedsVerification(err.response?.status === 403)
-    }
-  }
-
-  async function handleResend() {
-    setResendState('sending')
-    try {
-      await resendVerification(form.email)
     } finally {
-      setResendState('sent')
+      setIsSubmitting(false)
     }
   }
 
@@ -92,26 +80,6 @@ export default function LoginPage() {
 
             <AlertBanner>{error}</AlertBanner>
 
-            {needsVerification && (
-              <div className="alert alert-warning py-2 small mb-3">
-                {resendState === 'sent' ? (
-                  <>Verification email sent — check your inbox.</>
-                ) : (
-                  <>
-                    Haven&apos;t verified your email yet?{' '}
-                    <button
-                      type="button"
-                      className="btn btn-link btn-sm p-0 align-baseline"
-                      onClick={handleResend}
-                      disabled={resendState === 'sending'}
-                    >
-                      {resendState === 'sending' ? 'Sending…' : 'Resend verification email'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
             <form onSubmit={handleSubmit} noValidate>
               <FormField label="Email address" htmlFor="email">
                 <input
@@ -149,8 +117,8 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isLoading}>
-                {isLoading ? 'Signing in…' : 'Sign in'}
+              <button type="submit" className="btn btn-app-primary w-100 py-2 mt-2" disabled={isSubmitting}>
+                {isSubmitting ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
 
